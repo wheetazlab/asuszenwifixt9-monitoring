@@ -1023,36 +1023,40 @@
         "sortBy": [{"desc": true, "displayName": "RSSI (dBm)"}]
       },
       "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(Time|Value|mac|node|band|hostname|ip)$"
+            }
+          }
+        },
         {"id": "merge", "options": {}},
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
-              "Value": true,
-              "__name__": true,
-              "job": true,
-              "namespace": true,
-              "pod": true,
-              "instance": true,
-              "radio": true
+              "Value": true
             },
             "indexByName": {
               "hostname": 0,
-              "mac": 1,
-              "node": 2,
-              "band": 3,
-              "Value #A": 4,
-              "Value #B": 5,
-              "Value #C": 6,
-              "Value #D": 7,
-              "Value #E": 8,
-              "Value #F": 9
+              "ip": 1,
+              "mac": 2,
+              "node": 3,
+              "band": 4,
+              "Value #A": 5,
+              "Value #B": 6,
+              "Value #C": 7,
+              "Value #D": 8,
+              "Value #E": 9,
+              "Value #F": 10
             },
             "renameByName": {
+              "ip": "IP Address",
               "Value #A": "RSSI (dBm)",
-              "Value #B": "TX PHY Rate (kbps)",
-              "Value #C": "RX PHY Rate (kbps)",
+              "Value #B": "TX Rate (kbps)",
+              "Value #C": "RX Rate (kbps)",
               "Value #D": "Download",
               "Value #E": "Upload",
               "Value #F": "Idle"

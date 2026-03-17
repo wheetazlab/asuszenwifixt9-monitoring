@@ -369,3 +369,76 @@ def split_sections(output: str) -> dict[str, str]:
         sections[current_key] = "\n".join(current_lines)
 
     return sections
+
+
+# ---------------------------------------------------------------------------
+# Wired client helpers
+# ---------------------------------------------------------------------------
+
+
+def parse_brctl_showmacs(text: str) -> list[dict]:
+    """
+    Parse `brctl showmacs br0` output.
+
+    Format:
+        port no   mac addr          is local?   ageing timer
+          1       aa:bb:cc:dd:ee:ff   yes          0.00
+
+    Returns list of {port_no: int, mac: str (upper), is_local: bool}.
+    Header and malformed lines are skipped.
+    """
+    entries: list[dict] = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            port_no = int(parts[0])
+            mac = parts[1].upper()
+            is_local = parts[2].lower() == "yes"
+            entries.append({"port_no": port_no, "mac": mac, "is_local": is_local})
+        except (ValueError, IndexError):
+            continue
+    return entries
+
+
+def parse_brif_ports(text: str) -> dict[str, int]:
+    """
+    Parse sysfs bridge port map output.
+
+    Lines are: "<ifname> <hex_port_no>"  e.g. "eth1 0x1"
+    Returns {ifname: port_no_int}.
+    """
+    port_map: dict[str, int] = {}
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) != 2:
+            continue
+        try:
+            port_map[parts[0]] = int(parts[1], 16)
+        except (ValueError, IndexError):
+            continue
+    return port_map
+
+
+def parse_arp(text: str) -> dict[str, str]:
+    """
+    Parse /proc/net/arp.
+
+    Format:
+        IP address       HW type     Flags       HW address            Mask     Device
+        192.168.86.117   0x1         0x2         48:68:4a:9d:48:4c     *        br0
+
+    Returns {mac_upper: ip} for complete entries (flags 0x2).
+    """
+    result: dict[str, str] = {}
+    for line in text.splitlines()[1:]:  # skip header
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        ip = parts[0]
+        flags = parts[2]
+        mac = parts[3].upper()
+        if flags == "0x2" and mac != "00:00:00:00:00:00":
+            result[mac] = ip
+    return result

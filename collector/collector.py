@@ -23,6 +23,7 @@ from .config import (
     ROUTER_BACKHAUL_MACS,
     ROUTER_TRACKED_INTERFACES,
     ROUTER_WIFI_IFACES,
+    ROUTER_WIRED_PORTS,
 )
 from .ssh_client import RouterSSHClient
 
@@ -46,7 +47,16 @@ cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0
 echo __net_dev__
 cat /proc/net/dev
 echo __dhcp_leases__
-cat /tmp/dnsmasq.leases 2>/dev/null
+cat /var/lib/misc/dnsmasq.leases 2>/dev/null
+"""
+
+_WIRED_BATCH = """\
+echo __brctl_showmacs__
+brctl showmacs br0 2>/dev/null
+echo __brif_ports__
+for d in /sys/class/net/br0/brif/*; do echo "$(basename $d) $(cat $d/port_no 2>/dev/null)"; done
+echo __arp__
+cat /proc/net/arp
 """
 
 
@@ -95,6 +105,7 @@ class NodeConfig:
         wifi_ifaces: list[tuple[str, str]] | None = None,
         tracked_interfaces: set[str] | None = None,
         backhaul_macs: set[str] | None = None,
+        wired_ports: set[str] | None = None,
     ) -> None:
         self.name = name
         self.host = host
@@ -105,6 +116,7 @@ class NodeConfig:
         self.wifi_ifaces = wifi_ifaces or ROUTER_WIFI_IFACES
         self.tracked_interfaces = tracked_interfaces or ROUTER_TRACKED_INTERFACES
         self.backhaul_macs = backhaul_macs or set()
+        self.wired_ports = wired_ports or ROUTER_WIRED_PORTS
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +137,8 @@ class RouterCollector:
             n.name: RouterSSHClient(n.host, n.port, n.username, n.password)
             for n in nodes
         }
-        # MAC → hostname map, populated from the router's DHCP leases each scrape
-        self._dhcp_map: dict[str, str] = {}
+        # MAC → {hostname, ip} map, populated from the router's DHCP leases each scrape
+        self._dhcp_map: dict[str, dict[str, str]] = {}
 
     def close(self) -> None:
         for client in self._ssh.values():
@@ -194,7 +206,10 @@ class RouterCollector:
         if node.is_router:
             leases_text = sys_sec.get("dhcp_leases", "")
             leases = parsers.parse_dhcp_leases(leases_text)
-            self._dhcp_map = {l["mac"]: l["hostname"] for l in leases if l["hostname"]}
+            self._dhcp_map = {
+                l["mac"]: {"hostname": l["hostname"], "ip": l["ip"]}
+                for l in leases
+            }
             m.dhcp_leases.add_metric([], float(len(leases)))
 
         net = parsers.parse_net_dev(sys_sec.get("net_dev", ""))
@@ -277,8 +292,10 @@ class RouterCollector:
                     sta = parsers.parse_sta_info(sta_sec.get(f"sta_{iface}_{safe_key}", ""))
                     if not sta:
                         continue
-                    hostname = self._dhcp_map.get(mac, "")
-                    cl = [node.name, iface, band, mac, hostname]
+                    dhcp = self._dhcp_map.get(mac, {})
+                    hostname = dhcp.get("hostname", "")
+                    ip = dhcp.get("ip", "")
+                    cl = [node.name, iface, band, mac, hostname, ip]
 
                     if "rssi_dbm" in sta:
                         m.client_rssi.add_metric(cl, sta["rssi_dbm"])
@@ -297,8 +314,30 @@ class RouterCollector:
                     if "idle_seconds" in sta:
                         m.client_idle.add_metric(cl, sta["idle_seconds"])
 
-    def _hostname(self, mac: str) -> str:
-        return self._dhcp_map.get(mac.upper(), "")
+        # ── Batch 4: wired clients (bridge FDB + ARP) ────────────────────
+        wired_raw = ssh.run(_WIRED_BATCH)
+        wired_sec = parsers.split_sections(wired_raw)
+
+        port_to_iface: dict[int, str] = {
+            v: k for k, v in parsers.parse_brif_ports(wired_sec.get("brif_ports", "")).items()
+        }
+        arp_map = parsers.parse_arp(wired_sec.get("arp", ""))
+
+        seen_wired: set[str] = set()
+        for entry in parsers.parse_brctl_showmacs(wired_sec.get("brctl_showmacs", "")):
+            if entry["is_local"]:
+                continue
+            mac = entry["mac"]
+            if mac in seen_wired:
+                continue
+            iface = port_to_iface.get(entry["port_no"])
+            if iface not in node.wired_ports:
+                continue
+            seen_wired.add(mac)
+            dhcp = self._dhcp_map.get(mac, {})
+            hostname = dhcp.get("hostname", "")
+            ip = dhcp.get("ip", "") or arp_map.get(mac, "")
+            m.wired_client_info.add_metric([node.name, iface, mac, hostname, ip], 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +348,8 @@ _NODE = ["node"]
 _NODE_IFACE = ["node", "interface"]
 _NODE_RADIO_BAND = ["node", "radio", "band"]
 _NODE_RADIO_BAND_TYPE = ["node", "radio", "band", "type"]
-_CLIENT = ["node", "radio", "band", "mac", "hostname"]
+_CLIENT = ["node", "radio", "band", "mac", "hostname", "ip"]
+_WIRED_CLIENT = ["node", "interface", "mac", "hostname", "ip"]
 
 
 class _MetricBag:
@@ -491,6 +531,13 @@ class _MetricBag:
             labels=_CLIENT,
         )
 
+        # -- wired clients --
+        self.wired_client_info = GaugeMetricFamily(
+            "asus_router_wired_client_info",
+            "Wired client connected to the router/extender (always 1)",
+            labels=_WIRED_CLIENT,
+        )
+
     def iter_all(self) -> Iterator[Metric]:
         yield self.uptime
         yield self.load1
@@ -529,3 +576,4 @@ class _MetricBag:
         yield self.client_tx_failures
         yield self.client_tx_retries
         yield self.client_idle
+        yield self.wired_client_info

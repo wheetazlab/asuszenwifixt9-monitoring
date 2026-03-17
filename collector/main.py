@@ -20,6 +20,7 @@ from .config import (
     EXTENDER_SSH_PORT,
     EXTENDER_TRACKED_INTERFACES,
     EXTENDER_WIFI_IFACES,
+    EXTENDER_WIRED_PORTS,
     LOG_LEVEL,
     METRICS_PORT,
     ROUTER_BACKHAUL_MACS,
@@ -27,6 +28,7 @@ from .config import (
     ROUTER_SSH_PORT,
     ROUTER_TRACKED_INTERFACES,
     ROUTER_WIFI_IFACES,
+    ROUTER_WIRED_PORTS,
     SSH_PASSWORD,
     SSH_USERNAME,
 )
@@ -50,6 +52,7 @@ def main() -> None:
             wifi_ifaces=ROUTER_WIFI_IFACES,
             tracked_interfaces=ROUTER_TRACKED_INTERFACES,
             backhaul_macs=set(),
+            wired_ports=ROUTER_WIRED_PORTS,
         ),
         NodeConfig(
             name="extender",
@@ -63,6 +66,7 @@ def main() -> None:
             # Filter these MAC addresses out of "client" metrics on the extender —
             # they are the router's backhaul radios, not real clients.
             backhaul_macs=ROUTER_BACKHAUL_MACS,
+            wired_ports=EXTENDER_WIRED_PORTS,
         ),
     ]
 

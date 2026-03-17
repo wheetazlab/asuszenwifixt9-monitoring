@@ -49,6 +49,11 @@ EXTENDER_TRACKED_INTERFACES: set[str] = {
     "wl2.1",       # 5GHz-2 client-facing virtual BSS
 }
 
+# Bridge interfaces that are wired LAN ports (for wired client detection).
+# Excludes WiFi radios and backhaul links.
+ROUTER_WIRED_PORTS: set[str] = {"eth1", "eth2", "eth3"}
+EXTENDER_WIRED_PORTS: set[str] = {"eth1", "eth2", "eth3"}
+
 # Router backhaul MAC addresses — these appear in the extender's assoclist on
 # the backhaul radios. We still collect metrics for them (backhaul link quality)
 # but label them as the router node rather than a wifi client.
