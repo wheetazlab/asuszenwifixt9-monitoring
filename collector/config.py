@@ -66,7 +66,9 @@ EXTENDER_WIRED_PORTS: set[str] = {"eth1", "eth2", "eth3"}
 # the backhaul radios. We still collect metrics for them (backhaul link quality)
 # but label them as the router node rather than a wifi client.
 ROUTER_BACKHAUL_MACS: set[str] = {
-    "E8:9C:25:AB:FC:50",  # router eth4 (2.4GHz)
-    "E8:9C:25:AB:FC:54",  # router eth5 (5GHz)
-    "E8:9C:25:AB:FC:58",  # router eth6 (5GHz-2 backhaul)
+    "E8:9C:25:AB:FC:50",  # router eth4 (2.4GHz) — own radio MAC
+    "E8:9C:25:AB:FC:54",  # router eth5 (5GHz) — own radio MAC
+    "E8:9C:25:AB:FC:58",  # router eth6 (5GHz-2 backhaul) — own radio MAC
+    "E8:9C:25:AC:1E:21",  # extender 2.4GHz radio — appears in router eth4 assoclist
+    "E8:9C:25:AC:1E:28",  # extender 5GHz-2 radio — appears in router eth6 assoclist
 }
