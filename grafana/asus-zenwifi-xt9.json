@@ -566,7 +566,7 @@
       "id": 16,
       "title": "Client Count per Radio",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 23},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 23},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -614,9 +614,9 @@
     },
     {
       "id": 17,
-      "title": "Channel Utilization",
+      "title": "Channel Utilization — Router",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 23},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 31},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -657,20 +657,83 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "asus_router_wifi_channel_utilization_percent{type=\"busy\"}",
-          "legendFormat": "{{node}} {{band}} busy",
+          "expr": "asus_router_wifi_channel_utilization_percent{node=\"router\",type=\"busy\"}",
+          "legendFormat": "{{band}} busy",
           "refId": "A"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "asus_router_wifi_channel_utilization_percent{type=\"tx\"}",
-          "legendFormat": "{{node}} {{band}} tx",
+          "expr": "asus_router_wifi_channel_utilization_percent{node=\"router\",type=\"tx\"}",
+          "legendFormat": "{{band}} tx",
           "refId": "B"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "asus_router_wifi_channel_utilization_percent{type=\"obss\"}",
-          "legendFormat": "{{node}} {{band}} obss",
+          "expr": "asus_router_wifi_channel_utilization_percent{node=\"router\",type=\"obss\"}",
+          "legendFormat": "{{band}} obss",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Channel Utilization — Extender",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 31},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "asus_router_wifi_channel_utilization_percent{node=\"extender\",type=\"busy\"}",
+          "legendFormat": "{{band}} busy",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "asus_router_wifi_channel_utilization_percent{node=\"extender\",type=\"tx\"}",
+          "legendFormat": "{{band}} tx",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "asus_router_wifi_channel_utilization_percent{node=\"extender\",type=\"obss\"}",
+          "legendFormat": "{{band}} obss",
           "refId": "C"
         }
       ]
@@ -679,7 +742,7 @@
       "id": 18,
       "title": "Noise Floor",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 23},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 23},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -728,7 +791,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 31},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 39},
       "id": 19,
       "title": "Backhaul Link",
       "type": "row"
@@ -737,7 +800,7 @@
       "id": 20,
       "title": "Backhaul RSSI",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -793,7 +856,7 @@
       "id": 21,
       "title": "Backhaul SNR",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -848,7 +911,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 40},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 48},
       "id": 22,
       "title": "Connected Clients",
       "type": "row"
@@ -857,7 +920,7 @@
       "id": 23,
       "title": "Top 15 — Download Rate",
       "type": "bargauge",
-      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 41},
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 49},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -895,7 +958,7 @@
       "id": 24,
       "title": "Top 15 — Upload Rate",
       "type": "bargauge",
-      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 41},
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 49},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
@@ -933,7 +996,7 @@
       "id": 25,
       "title": "All Clients",
       "type": "table",
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 51},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 59},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "fieldConfig": {
         "defaults": {
