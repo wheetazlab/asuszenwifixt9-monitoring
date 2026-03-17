@@ -60,17 +60,28 @@ cat /proc/net/arp
 """
 
 
-def _build_wifi_batch(ifaces: list[tuple[str, str]]) -> str:
-    """Build a single SSH command that dumps assoclist + status + chanim for every radio."""
+def _build_wifi_batch(
+    radio_ifaces: list[tuple[str, str]],
+    client_ifaces: list[tuple[str, str]] | None = None,
+) -> str:
+    """
+    Build a single SSH command:
+    - status + chanim on radio_ifaces (physical radios — for backhaul/noise/chanim)
+    - assoclist on client_ifaces (virtual BSS on extender, same as radio on router)
+    """
+    eff_client = client_ifaces if client_ifaces is not None else radio_ifaces
     parts: list[str] = []
-    for iface, _ in ifaces:
+    for iface, _ in radio_ifaces:
         parts += [
-            f"echo __assoclist_{iface}__",
-            f"wl -i {iface} assoclist 2>/dev/null",
             f"echo __status_{iface}__",
             f"wl -i {iface} status 2>/dev/null",
             f"echo __chanim_{iface}__",
             f"wl -i {iface} chanim_stats 2>/dev/null",
+        ]
+    for iface, _ in eff_client:
+        parts += [
+            f"echo __assoclist_{iface}__",
+            f"wl -i {iface} assoclist 2>/dev/null",
         ]
     return "\n".join(parts)
 
@@ -106,6 +117,7 @@ class NodeConfig:
         tracked_interfaces: set[str] | None = None,
         backhaul_macs: set[str] | None = None,
         wired_ports: set[str] | None = None,
+        client_ifaces: list[tuple[str, str]] | None = None,
     ) -> None:
         self.name = name
         self.host = host
@@ -117,6 +129,9 @@ class NodeConfig:
         self.tracked_interfaces = tracked_interfaces or ROUTER_TRACKED_INTERFACES
         self.backhaul_macs = backhaul_macs or set()
         self.wired_ports = wired_ports or ROUTER_WIRED_PORTS
+        # client_ifaces: virtual BSS interfaces for assoclist/sta_info.
+        # Set on extender (wl0.1/wl1.1/wl2.1); None means same as wifi_ifaces.
+        self.client_ifaces = client_ifaces
 
 
 # ---------------------------------------------------------------------------
@@ -226,25 +241,16 @@ class RouterCollector:
             m.rx_drops.add_metric(lbl, stats["rx_drop"])
             m.tx_drops.add_metric(lbl, stats["tx_drop"])
 
-        # ── Batch 2: WiFi radio summaries (assoclist + status + chanim) ──
-        wifi_raw = ssh.run(_build_wifi_batch(node.wifi_ifaces))
+        # ── Batch 2: WiFi radio summaries + client assoclist ─────────────────
+        # radio_ifaces (eth4/5/6) → status + chanim (backhaul RSSI, noise, channel util)
+        # client_ifaces (wl0.1/1.1/2.1 on extender, same on router) → assoclist
+        eff_client_ifaces = node.client_ifaces or node.wifi_ifaces
+        wifi_raw = ssh.run(_build_wifi_batch(node.wifi_ifaces, node.client_ifaces))
         wifi_sec = parsers.split_sections(wifi_raw)
 
-        # Build a list of (iface, band, client_macs) for the sta_info batch
-        iface_clients: list[tuple[str, str, list[str]]] = []
-
+        # ── Radio status / chanim (physical interfaces) ───────────────────────
         for iface, band in node.wifi_ifaces:
             radio_lbl = [node.name, iface, band]
-
-            assoc_text = wifi_sec.get(f"assoclist_{iface}", "")
-            all_macs = parsers.parse_assoclist(assoc_text)
-
-            # Separate backhaul MACs from regular client MACs
-            client_macs = [mac for mac in all_macs if mac not in node.backhaul_macs]
-            backhaul_macs = [mac for mac in all_macs if mac in node.backhaul_macs]
-
-            m.wifi_clients.add_metric(radio_lbl, float(len(client_macs)))
-            m.wifi_associated.add_metric(radio_lbl, float(len(all_macs)))
 
             status = parsers.parse_wifi_status(wifi_sec.get(f"status_{iface}", ""))
             if "noise_dbm" in status:
@@ -253,9 +259,6 @@ class RouterCollector:
                 m.wifi_chan_util.add_metric(
                     [node.name, iface, band, "qbss"], status["channel_util_pct"]
                 )
-
-            # Backhaul link quality (extender nodes: these are the "assoclist" entries
-            # for the router's backhaul MACs seen on the extender's radio)
             if not node.is_router and "rssi_dbm" in status and status["rssi_dbm"] < 0:
                 m.backhaul_rssi.add_metric(radio_lbl, status["rssi_dbm"])
             if not node.is_router and "snr_db" in status:
@@ -278,6 +281,13 @@ class RouterCollector:
                 if "glitch" in chanim:
                     m.wifi_glitch.add_metric(radio_lbl, chanim["glitch"])
 
+        # ── Client assoclist (virtual BSS on extender, physical on router) ────
+        iface_clients: list[tuple[str, str, list[str]]] = []
+        for iface, band in eff_client_ifaces:
+            all_macs = parsers.parse_assoclist(wifi_sec.get(f"assoclist_{iface}", ""))
+            client_macs = [mac for mac in all_macs if mac not in node.backhaul_macs]
+            m.wifi_clients.add_metric([node.name, iface, band], float(len(client_macs)))
+            m.wifi_associated.add_metric([node.name, iface, band], float(len(all_macs)))
             iface_clients.append((iface, band, client_macs))
 
         # ── Batch 3: per-client sta_info (all radios, all clients in one exec) ──
@@ -337,6 +347,9 @@ class RouterCollector:
             dhcp = self._dhcp_map.get(mac, {})
             hostname = dhcp.get("hostname", "")
             ip = dhcp.get("ip", "") or arp_map.get(mac, "")
+            # Skip MACs with no IP — likely an unmanaged switch's own MAC
+            if not ip:
+                continue
             m.wired_client_info.add_metric([node.name, iface, mac, hostname, ip], 1.0)
 
 

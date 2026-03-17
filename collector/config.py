@@ -27,6 +27,14 @@ EXTENDER_WIFI_IFACES: list[tuple[str, str]] = [
     ("eth6", "5GHz-2"),
 ]
 
+# On the extender the client-facing virtual BSSes are separate from the
+# physical radio interfaces used for status/chanim (backhaul metrics).
+EXTENDER_CLIENT_IFACES: list[tuple[str, str]] = [
+    ("wl0.1", "2.4GHz"),
+    ("wl1.1", "5GHz"),
+    ("wl2.1", "5GHz-2"),
+]
+
 # Network interfaces to export traffic counters for (per node type)
 ROUTER_TRACKED_INTERFACES: set[str] = {
     "eth0",        # WAN

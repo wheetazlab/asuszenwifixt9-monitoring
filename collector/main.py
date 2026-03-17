@@ -16,6 +16,7 @@ from prometheus_client import REGISTRY, start_http_server
 
 from .collector import NodeConfig, RouterCollector
 from .config import (
+    EXTENDER_CLIENT_IFACES,
     EXTENDER_SSH_HOST,
     EXTENDER_SSH_PORT,
     EXTENDER_TRACKED_INTERFACES,
@@ -67,6 +68,7 @@ def main() -> None:
             # they are the router's backhaul radios, not real clients.
             backhaul_macs=ROUTER_BACKHAUL_MACS,
             wired_ports=EXTENDER_WIRED_PORTS,
+            client_ifaces=EXTENDER_CLIENT_IFACES,
         ),
     ]
 

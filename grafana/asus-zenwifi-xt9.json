@@ -947,8 +947,7 @@
           "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
         },
         "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "RSSI (dBm)"},
+          {"matcher": {"id": "byName", "options": "RSSI (dBm)"},
             "properties": [
               {"id": "unit", "value": "dBm"},
               {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "gradient"}},
@@ -964,38 +963,38 @@
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "TX PHY Rate (kbps)"},
+            "matcher": {"id": "byName", "options": "TX Rate (kbps)"},
             "properties": [
               {"id": "unit", "value": "kbps"},
-              {"id": "custom.width", "value": 140}
+              {"id": "custom.width", "value": 130}
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "RX PHY Rate (kbps)"},
+            "matcher": {"id": "byName", "options": "RX Rate (kbps)"},
             "properties": [
               {"id": "unit", "value": "kbps"},
-              {"id": "custom.width", "value": 140}
+              {"id": "custom.width", "value": 130}
             ]
           },
           {
             "matcher": {"id": "byName", "options": "Download"},
             "properties": [
               {"id": "unit", "value": "bps"},
-              {"id": "custom.width", "value": 120}
+              {"id": "custom.width", "value": 110}
             ]
           },
           {
             "matcher": {"id": "byName", "options": "Upload"},
             "properties": [
               {"id": "unit", "value": "bps"},
-              {"id": "custom.width", "value": 120}
+              {"id": "custom.width", "value": 110}
             ]
           },
           {
             "matcher": {"id": "byName", "options": "Idle"},
             "properties": [
               {"id": "unit", "value": "s"},
-              {"id": "custom.width", "value": 90}
+              {"id": "custom.width", "value": 70}
             ]
           },
           {
@@ -1008,7 +1007,11 @@
           },
           {
             "matcher": {"id": "byName", "options": "hostname"},
-            "properties": [{"id": "custom.width", "value": 160}]
+            "properties": [{"id": "custom.width", "value": 150}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "IP Address"},
+            "properties": [{"id": "custom.width", "value": 115}]
           },
           {
             "matcher": {"id": "byName", "options": "mac"},
@@ -1027,7 +1030,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|Value|mac|node|band|hostname|ip)$"
+              "pattern": "^(Time|Value #[A-F]|mac|node|band|hostname|ip)$"
             }
           }
         },
