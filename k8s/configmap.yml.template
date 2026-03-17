@@ -1,0 +1,17 @@
+# Template — copy to configmap.yml, fill in your values, apply, then delete the copy.
+#
+#   kubectl apply -f k8s/configmap.yml
+#
+# These values are non-sensitive and will be provided by Ansible at deploy time.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: asus-router-exporter-config
+  namespace: asus-monitoring
+data:
+  ROUTER_SSH_HOST: ""        # REQUIRED — set to your router IP
+  ROUTER_SSH_PORT: "2222"
+  EXTENDER_SSH_HOST: ""       # REQUIRED — set to your extender IP
+  EXTENDER_SSH_PORT: "2222"
+  METRICS_PORT: "9100"
+  LOG_LEVEL: "INFO"

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: asus-router-exporter
+  namespace: asus-monitoring
+  labels:
+    app: asus-router-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: asus-router-exporter
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP

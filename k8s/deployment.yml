@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asus-router-exporter
+  namespace: asus-monitoring
+  labels:
+    app: asus-router-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: asus-router-exporter
+  template:
+    metadata:
+      labels:
+        app: asus-router-exporter
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: exporter
+          image: ghcr.io/wheetazlab/asuszenwifixt9-monitoring:latest
+          imagePullPolicy: Always
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: asus-router-exporter-config
+            - secretRef:
+                name: router-ssh-credentials
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
