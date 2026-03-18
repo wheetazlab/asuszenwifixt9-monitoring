@@ -1071,16 +1071,7 @@
           },
           {
             "matcher": {"id": "byName", "options": "hostname"},
-            "properties": [
-              {"id": "custom.width", "value": 150},
-              {"id": "links", "value": [
-                {
-                  "title": "Drill into client",
-                  "url": "/d/asus-zenwifi-xt9?var-selected_mac=${__data.fields.mac}",
-                  "targetBlank": false
-                }
-              ]}
-            ]
+            "properties": [{"id": "custom.width", "value": 150}]
           },
           {
             "matcher": {"id": "byName", "options": "IP Address"},
@@ -1088,7 +1079,16 @@
           },
           {
             "matcher": {"id": "byName", "options": "mac"},
-            "properties": [{"id": "custom.width", "value": 140}]
+            "properties": [
+              {"id": "custom.width", "value": 140},
+              {"id": "links", "value": [
+                {
+                  "title": "Drill into client",
+                  "url": "/d/asus-zenwifi-xt9?var-selected_mac=${__value.raw}",
+                  "targetBlank": false
+                }
+              ]}
+            ]
           },
           {
             "matcher": {"id": "byName", "options": "Port"},
