@@ -350,7 +350,7 @@ class RouterCollector:
             # Skip MACs with no IP — likely an unmanaged switch's own MAC
             if not ip:
                 continue
-            m.wired_client_info.add_metric([node.name, iface, mac, hostname, ip], 1.0)
+            m.wired_client_info.add_metric([node.name, "eth", "Wired", iface, mac, hostname, ip], 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +362,7 @@ _NODE_IFACE = ["node", "interface"]
 _NODE_RADIO_BAND = ["node", "radio", "band"]
 _NODE_RADIO_BAND_TYPE = ["node", "radio", "band", "type"]
 _CLIENT = ["node", "radio", "band", "mac", "hostname", "ip"]
-_WIRED_CLIENT = ["node", "interface", "mac", "hostname", "ip"]
+_WIRED_CLIENT = ["node", "radio", "band", "interface", "mac", "hostname", "ip"]
 
 
 class _MetricBag:
