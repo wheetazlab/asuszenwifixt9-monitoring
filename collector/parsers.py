@@ -486,21 +486,3 @@ def parse_traffic_analyzer(text: str) -> dict[str, dict[str, int]]:
             continue
     return result
 
-
-def parse_web_history(text: str) -> list[tuple[str, int, str]]:
-    """
-    Parse WebHistory.db query output.
-
-    Each line: "mac|timestamp|url"
-    Returns list of (mac_upper, timestamp_int, url) tuples.
-    """
-    entries: list[tuple[str, int, str]] = []
-    for line in text.splitlines():
-        parts = line.strip().split("|", 2)
-        if len(parts) != 3:
-            continue
-        try:
-            entries.append((parts[0].upper(), int(parts[1]), parts[2]))
-        except (ValueError, IndexError):
-            continue
-    return entries

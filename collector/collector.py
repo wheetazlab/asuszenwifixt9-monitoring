@@ -101,17 +101,13 @@ def _build_sta_batch(ifaces_and_macs: list[tuple[str, str, list[str]]]) -> str:
     return "\n".join(parts)
 
 
-def _build_db_batch(traffic_ts: int, history_ts: int) -> str:
-    """Build SSH command to query TrafficAnalyzer and WebHistory SQLite DBs on the router."""
+def _build_db_batch(traffic_ts: int) -> str:
+    """Build SSH command to query TrafficAnalyzer SQLite DB on the router."""
     return (
         "echo __traffic_analyzer__\n"
         f'sqlite3 /jffs/.sys/TrafficAnalyzer/TrafficAnalyzer.db '
         f'"SELECT mac,SUM(tx),SUM(rx),MAX(timestamp) FROM traffic '
         f'WHERE timestamp>{traffic_ts} GROUP BY mac;" 2>/dev/null\n'
-        "echo __web_history__\n"
-        f'sqlite3 /jffs/.sys/WebHistory/WebHistory.db '
-        f'"SELECT mac,timestamp,url FROM history '
-        f'WHERE timestamp>{history_ts} ORDER BY timestamp ASC LIMIT 1000;" 2>/dev/null\n'
     )
 
 
@@ -188,8 +184,6 @@ class RouterCollector:
         # TrafficAnalyzer state: last processed DB timestamp + cumulative byte totals
         self._traffic_last_ts: int = int(time.time()) - 120
         self._traffic_cumulative: dict[str, dict[str, int]] = {}
-        # WebHistory state: only capture entries after exporter startup
-        self._webhistory_last_ts: int = int(time.time())
 
     def close(self) -> None:
         for client in self._ssh.values():
@@ -392,7 +386,7 @@ class RouterCollector:
 
         # ── Batch 5: router-only SQLite DB queries ─────────────────────────
         if node.is_router:
-            db_raw = ssh.run(_build_db_batch(self._traffic_last_ts, self._webhistory_last_ts))
+            db_raw = ssh.run(_build_db_batch(self._traffic_last_ts))
             db_sec = parsers.split_sections(db_raw)
 
             # TrafficAnalyzer: accumulate per-MAC TX/RX bytes since last DB write
@@ -406,20 +400,6 @@ class RouterCollector:
             for mac, counts in self._traffic_cumulative.items():
                 m.traffic_tx_bytes.add_metric([mac], float(counts["tx"]))
                 m.traffic_rx_bytes.add_metric([mac], float(counts["rx"]))
-
-            # WebHistory: log new DNS/URL entries to stdout → Alloy → Loki
-            history_entries = parsers.parse_web_history(db_sec.get("web_history", ""))
-            if history_entries:
-                web_counts: dict[str, int] = {}
-                for mac, ts, url in history_entries:
-                    web_counts[mac] = web_counts.get(mac, 0) + 1
-                    logger.info(
-                        '{"event":"web_history","mac":"%s","ts":%d,"url":"%s"}',
-                        mac, ts, url,
-                    )
-                for mac, count in web_counts.items():
-                    m.web_history_events.add_metric([mac], float(count))
-                self._webhistory_last_ts = max(ts for _, ts, _ in history_entries)
 
 
 # ---------------------------------------------------------------------------
@@ -632,13 +612,6 @@ class _MetricBag:
             labels=["mac"],
         )
 
-        # -- WebHistory: new DNS/URL event count per device per scrape --
-        self.web_history_events = GaugeMetricFamily(
-            "asus_router_web_history_new_events",
-            "New web history (DNS) entries for this device in the last scrape interval",
-            labels=["mac"],
-        )
-
     def iter_all(self) -> Iterator[Metric]:
         yield self.uptime
         yield self.load1
@@ -680,4 +653,3 @@ class _MetricBag:
         yield self.wired_client_info
         yield self.traffic_tx_bytes
         yield self.traffic_rx_bytes
-        yield self.web_history_events
