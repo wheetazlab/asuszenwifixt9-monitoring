@@ -1079,6 +1079,10 @@
           {
             "matcher": {"id": "byName", "options": "mac"},
             "properties": [{"id": "custom.width", "value": 140}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Port"},
+            "properties": [{"id": "custom.width", "value": 70}]
           }
         ]
       },
@@ -1093,7 +1097,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|Value #[A-F]|mac|node|band|hostname|ip)$"
+              "pattern": "^(Time|Value #[A-F]|Value #G|mac|node|band|hostname|ip|interface)$"
             }
           }
         },
@@ -1103,7 +1107,8 @@
           "options": {
             "excludeByName": {
               "Time": true,
-              "Value": true
+              "Value": true,
+              "Value #G": true
             },
             "indexByName": {
               "hostname": 0,
@@ -1111,15 +1116,17 @@
               "mac": 2,
               "node": 3,
               "band": 4,
-              "Value #A": 5,
-              "Value #B": 6,
-              "Value #C": 7,
-              "Value #D": 8,
-              "Value #E": 9,
-              "Value #F": 10
+              "interface": 5,
+              "Value #A": 6,
+              "Value #B": 7,
+              "Value #C": 8,
+              "Value #D": 9,
+              "Value #E": 10,
+              "Value #F": 11
             },
             "renameByName": {
               "ip": "IP Address",
+              "interface": "Port",
               "Value #A": "RSSI (dBm)",
               "Value #B": "TX Rate (kbps)",
               "Value #C": "RX Rate (kbps)",
@@ -1178,6 +1185,14 @@
           "instant": true,
           "legendFormat": "",
           "refId": "F"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "asus_router_wired_client_info",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "G"
         }
       ]
     }
