@@ -38,7 +38,7 @@ kubectl create configmap asus-zenwifi-xt9-dashboard \
 | Memory Usage | Time series | RAM usage per node |
 | CPU Load | Time series | 1/5/15-minute load averages |
 | Temperature | Time series | Board temperature per node |
-| All Clients | Table | Per-client: hostname, IP, MAC, node, band, RSSI, TX/RX rate, download, upload, idle |
+| All Clients | Table | Per-client: hostname, IP, MAC, node, band, RSSI, TX/RX rate, download, upload, connected for |
 
 ## Client Table
 
@@ -56,7 +56,7 @@ The **All Clients** table merges six instant-query metrics by shared labels (`ma
 | RX Rate | `asus_router_wifi_client_rx_rate_kbps` | kbps |
 | Download | `rate(asus_router_wifi_client_rx_bytes_total[5m]) * 8` | bps |
 | Upload | `rate(asus_router_wifi_client_tx_bytes_total[5m]) * 8` | bps |
-| Idle | `asus_router_wifi_client_idle_seconds` | s |
+| Connected For | `asus_router_wifi_client_conn_time_seconds` | s |
 
 RSSI cells use a gradient colour: red below −70 dBm, yellow −70 to −55 dBm, green above −55 dBm.
 

@@ -1884,7 +1884,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Idle"
+              "options": "Connected For"
             },
             "properties": [
               {
@@ -1893,7 +1893,7 @@
               },
               {
                 "id": "custom.width",
-                "value": 70
+                "value": 100
               }
             ]
           },
@@ -2070,7 +2070,7 @@
               "Value #C": "RX Rate (kbps)",
               "Value #D": "Download",
               "Value #E": "Upload",
-              "Value #F": "Idle",
+              "Value #F": "Connected For",
               "Value #H": "DL (Traffic)",
               "Value #I": "UL (Traffic)"
             }
@@ -2138,7 +2138,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "asus_router_wifi_client_idle_seconds",
+          "expr": "asus_router_wifi_client_conn_time_seconds",
           "format": "table",
           "instant": true,
           "legendFormat": "",
