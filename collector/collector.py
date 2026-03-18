@@ -57,6 +57,8 @@ echo __brif_ports__
 for d in /sys/class/net/br0/brif/*; do echo "$(basename $d) $(cat $d/port_no 2>/dev/null)"; done
 echo __arp__
 cat /proc/net/arp
+echo __link_speeds__
+for p in eth1 eth2 eth3; do printf "%s %s\n" "$p" "$(cat /sys/class/net/$p/speed 2>/dev/null || echo 0)"; done
 """
 
 
@@ -97,6 +99,35 @@ def _build_sta_batch(ifaces_and_macs: list[tuple[str, str, list[str]]]) -> str:
                 f"wl -i {iface} sta_info {mac} 2>/dev/null",
             ]
     return "\n".join(parts)
+
+
+def _build_db_batch(traffic_ts: int, history_ts: int) -> str:
+    """Build SSH command to query TrafficAnalyzer and WebHistory SQLite DBs on the router."""
+    return (
+        "echo __traffic_analyzer__\n"
+        f'sqlite3 /jffs/.sys/TrafficAnalyzer/TrafficAnalyzer.db '
+        f'"SELECT mac,SUM(tx),SUM(rx),MAX(timestamp) FROM traffic '
+        f'WHERE timestamp>{traffic_ts} GROUP BY mac;" 2>/dev/null\n'
+        "echo __web_history__\n"
+        f'sqlite3 /jffs/.sys/WebHistory/WebHistory.db '
+        f'"SELECT mac,timestamp,url FROM history '
+        f'WHERE timestamp>{history_ts} ORDER BY timestamp ASC LIMIT 1000;" 2>/dev/null\n'
+    )
+
+
+def _speed_label(mbps: int) -> str:
+    """Convert link speed in Mbps to a human-readable band label."""
+    if mbps >= 10000:
+        return "10G"
+    if mbps >= 2500:
+        return "2.5G"
+    if mbps >= 1000:
+        return "1G"
+    if mbps >= 100:
+        return "100M"
+    if mbps >= 10:
+        return "10M"
+    return "Wired"
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +185,11 @@ class RouterCollector:
         }
         # MAC → {hostname, ip} map, populated from the router's DHCP leases each scrape
         self._dhcp_map: dict[str, dict[str, str]] = {}
+        # TrafficAnalyzer state: last processed DB timestamp + cumulative byte totals
+        self._traffic_last_ts: int = int(time.time()) - 120
+        self._traffic_cumulative: dict[str, dict[str, int]] = {}
+        # WebHistory state: only capture entries after exporter startup
+        self._webhistory_last_ts: int = int(time.time())
 
     def close(self) -> None:
         for client in self._ssh.values():
@@ -332,6 +368,7 @@ class RouterCollector:
             v: k for k, v in parsers.parse_brif_ports(wired_sec.get("brif_ports", "")).items()
         }
         arp_map = parsers.parse_arp(wired_sec.get("arp", ""))
+        speed_map = parsers.parse_link_speeds(wired_sec.get("link_speeds", ""))
 
         seen_wired: set[str] = set()
         for entry in parsers.parse_brctl_showmacs(wired_sec.get("brctl_showmacs", "")):
@@ -350,7 +387,39 @@ class RouterCollector:
             # Skip MACs with no IP — likely an unmanaged switch's own MAC
             if not ip:
                 continue
-            m.wired_client_info.add_metric([node.name, "eth", "Wired", iface, mac, hostname, ip], 1.0)
+            speed = _speed_label(speed_map.get(iface, 0))
+            m.wired_client_info.add_metric([node.name, "eth", speed, iface, mac, hostname, ip], 1.0)
+
+        # ── Batch 5: router-only SQLite DB queries ─────────────────────────
+        if node.is_router:
+            db_raw = ssh.run(_build_db_batch(self._traffic_last_ts, self._webhistory_last_ts))
+            db_sec = parsers.split_sections(db_raw)
+
+            # TrafficAnalyzer: accumulate per-MAC TX/RX bytes since last DB write
+            traffic_data = parsers.parse_traffic_analyzer(db_sec.get("traffic_analyzer", ""))
+            if traffic_data:
+                self._traffic_last_ts = max(v["max_ts"] for v in traffic_data.values())
+                for mac, counts in traffic_data.items():
+                    self._traffic_cumulative.setdefault(mac, {"tx": 0, "rx": 0})
+                    self._traffic_cumulative[mac]["tx"] += counts["tx"]
+                    self._traffic_cumulative[mac]["rx"] += counts["rx"]
+            for mac, counts in self._traffic_cumulative.items():
+                m.traffic_tx_bytes.add_metric([mac], float(counts["tx"]))
+                m.traffic_rx_bytes.add_metric([mac], float(counts["rx"]))
+
+            # WebHistory: log new DNS/URL entries to stdout → Alloy → Loki
+            history_entries = parsers.parse_web_history(db_sec.get("web_history", ""))
+            if history_entries:
+                web_counts: dict[str, int] = {}
+                for mac, ts, url in history_entries:
+                    web_counts[mac] = web_counts.get(mac, 0) + 1
+                    logger.info(
+                        '{"event":"web_history","mac":"%s","ts":%d,"url":"%s"}',
+                        mac, ts, url,
+                    )
+                for mac, count in web_counts.items():
+                    m.web_history_events.add_metric([mac], float(count))
+                self._webhistory_last_ts = max(ts for _, ts, _ in history_entries)
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +620,25 @@ class _MetricBag:
             labels=_WIRED_CLIENT,
         )
 
+        # -- TrafficAnalyzer: per-device cumulative bytes (WiFi + wired) --
+        self.traffic_tx_bytes = CounterMetricFamily(
+            "asus_router_traffic_analyzer_tx_bytes_total",
+            "Cumulative TX bytes per device since exporter start (from TrafficAnalyzer.db)",
+            labels=["mac"],
+        )
+        self.traffic_rx_bytes = CounterMetricFamily(
+            "asus_router_traffic_analyzer_rx_bytes_total",
+            "Cumulative RX bytes per device since exporter start (from TrafficAnalyzer.db)",
+            labels=["mac"],
+        )
+
+        # -- WebHistory: new DNS/URL event count per device per scrape --
+        self.web_history_events = GaugeMetricFamily(
+            "asus_router_web_history_new_events",
+            "New web history (DNS) entries for this device in the last scrape interval",
+            labels=["mac"],
+        )
+
     def iter_all(self) -> Iterator[Metric]:
         yield self.uptime
         yield self.load1
@@ -590,3 +678,6 @@ class _MetricBag:
         yield self.client_tx_retries
         yield self.client_idle
         yield self.wired_client_info
+        yield self.traffic_tx_bytes
+        yield self.traffic_rx_bytes
+        yield self.web_history_events

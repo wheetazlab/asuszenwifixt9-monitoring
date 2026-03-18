@@ -442,3 +442,65 @@ def parse_arp(text: str) -> dict[str, str]:
         if flags == "0x2" and mac != "00:00:00:00:00:00":
             result[mac] = ip
     return result
+
+
+def parse_link_speeds(text: str) -> dict[str, int]:
+    """
+    Parse link speed sysfs output.
+
+    Lines are: "<ifname> <speed_mbps>"  e.g. "eth1 1000"
+    Returns {ifname: speed_mbps_int}.
+    """
+    result: dict[str, int] = {}
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) != 2:
+            continue
+        try:
+            result[parts[0]] = int(parts[1])
+        except ValueError:
+            continue
+    return result
+
+
+def parse_traffic_analyzer(text: str) -> dict[str, dict[str, int]]:
+    """
+    Parse TrafficAnalyzer.db query output.
+
+    Each line: "mac|sum_tx|sum_rx|max_timestamp"
+    Returns {mac_upper: {"tx": int, "rx": int, "max_ts": int}}.
+    """
+    result: dict[str, dict[str, int]] = {}
+    for line in text.splitlines():
+        parts = line.strip().split("|")
+        if len(parts) != 4:
+            continue
+        try:
+            mac = parts[0].upper()
+            result[mac] = {
+                "tx": int(parts[1]),
+                "rx": int(parts[2]),
+                "max_ts": int(parts[3]),
+            }
+        except (ValueError, IndexError):
+            continue
+    return result
+
+
+def parse_web_history(text: str) -> list[tuple[str, int, str]]:
+    """
+    Parse WebHistory.db query output.
+
+    Each line: "mac|timestamp|url"
+    Returns list of (mac_upper, timestamp_int, url) tuples.
+    """
+    entries: list[tuple[str, int, str]] = []
+    for line in text.splitlines():
+        parts = line.strip().split("|", 2)
+        if len(parts) != 3:
+            continue
+        try:
+            entries.append((parts[0].upper(), int(parts[1]), parts[2]))
+        except (ValueError, IndexError):
+            continue
+    return entries
