@@ -19,7 +19,7 @@ Python package that implements the Prometheus custom collector.
 
 ## Data sources
 
-The exporter pulls data from **two distinct sources**: live SSH commands run against the router/extender, and a SQLite database that the router's firmware maintains locally.
+The exporter currently pulls data from **two distinct sources**: live SSH commands run against the router/extender, and a SQLite database that the router's firmware maintains locally.
 
 ### Source 1 — SSH commands (both nodes)
 
@@ -77,6 +77,19 @@ Results are merged into in-memory cumulative counters (`_traffic_cumulative`) ke
 Labels: `mac`, `hostname` (from DHCP leases), `ip` (from DHCP leases).
 
 > **Why a database instead of live counters?** The router's per-client live byte counters reset on disconnect and on radio restart. TrafficAnalyzer persists cumulative totals across disconnections, making it the only reliable source for long-term per-device bandwidth accounting.
+
+---
+
+### Databases not yet migrated
+
+Two additional SQLite databases exist on the router and are candidates for future migration away from SSH command parsing:
+
+| Database | Path on router | What it would replace | Status |
+|----------|---------------|-----------------------|--------|
+| `stainfo.db` | `/jffs/.sys/stainfo/stainfo.db` | **Batch 3 (STA info)** — replaces a loop of up to 50+ `wl sta_info <MAC>` SSH calls per scrape with a single SQL query. Both nodes' clients in one shot. Biggest potential win. | Not implemented |
+| `wifi_detect.db` | `/jffs/.sys/wifi_detect/wifi_detect.db` | **Noise floor** — replaces `wl status` parsing per radio | Not implemented |
+
+These are left for a future iteration. The SSH command batches remain the current source for everything those tables would cover.
 
 ---
 
@@ -143,7 +156,7 @@ All settings come from environment variables (see `config.py`):
 | `EXTENDER_SSH_HOST` | _(required)_ | Extender LAN IP |
 | `EXTENDER_SSH_PORT` | `2222` | |
 | `SSH_USERNAME` | `router` | Same credential used for both nodes |
-| `SSH_PASSWORD` | _(required)_ | Set from a Kubernetes Secret via `envFrom` |
+| `SSH_PASSWORD` | _(required)_ | SSH password for both nodes |
 | `METRICS_PORT` | `9100` | Port that `/metrics` listens on |
 | `LOG_LEVEL` | `INFO` | Python log level (`DEBUG`, `INFO`, `WARNING`, …) |
 

@@ -12,12 +12,15 @@
 
 ### Via Grafana sidecar (kube-prometheus-stack)
 
-If you're using the Ansible role, the dashboard is deployed automatically as a ConfigMap with the `grafana_dashboard: "1"` label — the Grafana sidecar picks it up within seconds, no restart required.
-
-To update a running cluster after a dashboard change, re-run the playbook:
+Deploy the dashboard as a ConfigMap with the `grafana_dashboard: "1"` label — the Grafana sidecar picks it up within seconds, no restart required:
 
 ```bash
-aplaybook playbooks/21-deploy_asus_monitoring.yml
+kubectl create configmap asus-zenwifi-xt9-dashboard \
+  --from-file=asus-zenwifi-xt9.json \
+  --namespace monitoring \
+  --dry-run=client -o yaml \
+  | kubectl label --local -f - grafana_dashboard=1 -o yaml \
+  | kubectl apply -f -
 ```
 
 ## Panels

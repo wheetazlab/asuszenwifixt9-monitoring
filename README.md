@@ -85,6 +85,9 @@ Labels: most metrics carry `node` (`router` or `extender`). WiFi metrics carry `
 │   ├── parsers.py       # pure parsing functions (no side effects)
 │   ├── collector.py     # RouterCollector (prometheus_client custom Collector)
 │   └── main.py          # entry point — registers collector, starts HTTP server
+├── grafana/
+│   ├── README.md        # dashboard import instructions and panel reference
+│   └── asus-zenwifi-xt9.json   # Grafana dashboard definition
 ├── Dockerfile
 ├── requirements.txt
 ├── k8s/
