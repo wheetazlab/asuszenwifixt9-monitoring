@@ -187,6 +187,63 @@ class RouterCollector:
         self._traffic_last_ts: int = int(time.time()) - 90000
         self._traffic_cumulative: dict[str, dict[str, int]] = {}
 
+        # Ensure the daily TrafficAnalyzer DB prune cron job is registered on the router
+        router_node = next((n for n in nodes if n.is_router), None)
+        if router_node:
+            self._ensure_prune_cron(self._ssh[router_node.name])
+
+    def _ensure_prune_cron(self, ssh: RouterSSHClient) -> None:
+        """Register a daily midnight cron job on the router to prune TrafficAnalyzer DB.
+
+        The router firmware's -d size cap stops writing instead of rotating, so we
+        keep 7 days of data via a cron DELETE+VACUUM. Registers once and persists
+        across reboots via /jffs/scripts/services-start.
+        """
+        existing = ssh.run("cru l 2>/dev/null")
+        if "prune_trafficanalyzer" in existing:
+            logger.debug("TrafficAnalyzer prune cron already registered")
+            return
+
+        prune_script = "/jffs/scripts/prune_trafficanalyzer.sh"
+
+        # Write the standalone prune script if not already present.
+        # Each line is single-quoted in the echo so $(...) is written literally
+        # and expands at script execution time, not at write time.
+        existing_prune = ssh.run(f"cat {prune_script} 2>/dev/null")
+        if not existing_prune.strip():
+            ssh.run(
+                f"echo '#!/bin/sh' > {prune_script}"
+                f" && echo 'cutoff=$(( $(date +%s) - 604800 ))' >> {prune_script}"
+                f" && echo 'sqlite3 /jffs/.sys/TrafficAnalyzer/TrafficAnalyzer.db"
+                f' "DELETE FROM traffic WHERE timestamp < $cutoff; VACUUM;"'
+                f"' >> {prune_script}"
+                f" && chmod +x {prune_script}"
+            )
+
+        # Register immediately in the live cron daemon
+        cru_line = f"cru a prune_trafficanalyzer '0 0 * * * {prune_script}'"
+        ssh.run(cru_line)
+
+        # Persist across reboots via /jffs/scripts/services-start.
+        # Use double-quotes around the schedule so services_start_line contains
+        # no single quotes and can be safely wrapped in echo '...' for writing.
+        services_start_line = (
+            '[ -z "$(cru l 2>/dev/null | grep prune_trafficanalyzer)" ] && '
+            f'cru a prune_trafficanalyzer "0 0 * * * {prune_script}"'
+        )
+        existing_script = ssh.run("cat /jffs/scripts/services-start 2>/dev/null")
+        if "prune_trafficanalyzer" not in existing_script:
+            if not existing_script.strip():
+                ssh.run(
+                    "echo '#!/bin/sh' > /jffs/scripts/services-start"
+                    f" && echo '{services_start_line}' >> /jffs/scripts/services-start"
+                    " && chmod +x /jffs/scripts/services-start"
+                )
+            else:
+                ssh.run(f"echo '{services_start_line}' >> /jffs/scripts/services-start")
+
+        logger.info("TrafficAnalyzer prune cron registered (daily midnight, keep 7 days)")
+
     def close(self) -> None:
         for client in self._ssh.values():
             client.close()
