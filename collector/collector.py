@@ -182,7 +182,9 @@ class RouterCollector:
         # MAC → {hostname, ip} map, populated from the router's DHCP leases each scrape
         self._dhcp_map: dict[str, dict[str, str]] = {}
         # TrafficAnalyzer state: last processed DB timestamp + cumulative byte totals
-        self._traffic_last_ts: int = int(time.time()) - 120
+        # Start 25 hours back so we always pick up the most recent hourly DB write
+        # (the router writes hourly aggregates, not real-time rows)
+        self._traffic_last_ts: int = int(time.time()) - 90000
         self._traffic_cumulative: dict[str, dict[str, int]] = {}
 
     def close(self) -> None:
