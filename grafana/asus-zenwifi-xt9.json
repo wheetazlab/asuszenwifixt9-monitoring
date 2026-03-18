@@ -1014,10 +1014,11 @@
             "properties": [
               {"id": "unit", "value": "dBm"},
               {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "gradient"}},
+              {"id": "noValue", "value": "—"},
               {"id": "thresholds", "value": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "red", "value": null},
+                  {"color": "transparent", "value": null},
                   {"color": "yellow", "value": -70},
                   {"color": "green", "value": -55}
                 ]
@@ -1070,7 +1071,16 @@
           },
           {
             "matcher": {"id": "byName", "options": "hostname"},
-            "properties": [{"id": "custom.width", "value": 150}]
+            "properties": [
+              {"id": "custom.width", "value": 150},
+              {"id": "links", "value": [
+                {
+                  "title": "Drill into client",
+                  "url": "/d/asus-zenwifi-xt9?var-selected_mac=${__data.fields.mac}",
+                  "targetBlank": false
+                }
+              ]}
+            ]
           },
           {
             "matcher": {"id": "byName", "options": "IP Address"},
@@ -1083,6 +1093,20 @@
           {
             "matcher": {"id": "byName", "options": "Port"},
             "properties": [{"id": "custom.width", "value": 70}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "DL (Traffic)"},
+            "properties": [
+              {"id": "unit", "value": "bps"},
+              {"id": "custom.width", "value": 110}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "UL (Traffic)"},
+            "properties": [
+              {"id": "unit", "value": "bps"},
+              {"id": "custom.width", "value": 110}
+            ]
           }
         ]
       },
@@ -1097,7 +1121,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|Value #[A-F]|Value #G|mac|node|band|hostname|ip|interface)$"
+              "pattern": "^(Time|Value #[A-I]|mac|node|band|hostname|ip|interface)$"
             }
           }
         },
@@ -1122,7 +1146,9 @@
               "Value #C": 8,
               "Value #D": 9,
               "Value #E": 10,
-              "Value #F": 11
+              "Value #F": 11,
+              "Value #H": 12,
+              "Value #I": 13
             },
             "renameByName": {
               "ip": "IP Address",
@@ -1132,7 +1158,9 @@
               "Value #C": "RX Rate (kbps)",
               "Value #D": "Download",
               "Value #E": "Upload",
-              "Value #F": "Idle"
+              "Value #F": "Idle",
+              "Value #H": "DL (Traffic)",
+              "Value #I": "UL (Traffic)"
             }
           }
         }
@@ -1193,6 +1221,125 @@
           "instant": true,
           "legendFormat": "",
           "refId": "G"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(asus_router_traffic_analyzer_rx_bytes_total[1h]) * 8",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "H"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(asus_router_traffic_analyzer_tx_bytes_total[1h]) * 8",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "I"
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 71},
+      "id": 26,
+      "title": "Client Detail — ${selected_mac}",
+      "type": "row",
+      "panels": [
+        {
+          "id": 27,
+          "title": "Traffic Rate — ${selected_mac}",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 72},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+              "unit": "bps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "rate(asus_router_traffic_analyzer_rx_bytes_total{mac=~\"$selected_mac\"}[30m]) * 8",
+              "legendFormat": "Download (TrafficAnalyzer)",
+              "refId": "A"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "rate(asus_router_traffic_analyzer_tx_bytes_total{mac=~\"$selected_mac\"}[30m]) * 8",
+              "legendFormat": "Upload (TrafficAnalyzer)",
+              "refId": "B"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "rate(asus_router_wifi_client_rx_bytes_total{mac=~\"$selected_mac\"}[5m]) * 8",
+              "legendFormat": "WiFi Download ({{band}})",
+              "refId": "C"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "rate(asus_router_wifi_client_tx_bytes_total{mac=~\"$selected_mac\"}[5m]) * 8",
+              "legendFormat": "WiFi Upload ({{band}})",
+              "refId": "D"
+            }
+          ]
+        },
+        {
+          "id": 28,
+          "title": "Web History — ${selected_mac}",
+          "description": "DNS/URL requests from WebHistory.db, shipped via Alloy to Loki. Requires Loki datasource variable to be set.",
+          "type": "logs",
+          "gridPos": {"h": 14, "w": 24, "x": 0, "y": 80},
+          "datasource": {"type": "loki", "uid": "${loki_datasource}"},
+          "fieldConfig": {"defaults": {}, "overrides": []},
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "targets": [
+            {
+              "datasource": {"type": "loki", "uid": "${loki_datasource}"},
+              "expr": "{namespace=\"asus-monitoring\", app=\"asus-router-exporter\"} | json | event = \"web_history\" | mac =~ \"$selected_mac\"",
+              "refId": "A"
+            }
+          ]
         }
       ]
     }
@@ -1214,6 +1361,38 @@
         "refresh": 1,
         "regex": "",
         "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Loki",
+        "multi": false,
+        "name": "loki_datasource",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": {"selected": false, "text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "definition": "label_values({__name__=~\"asus_router_wifi_client_rssi_dbm|asus_router_wired_client_info\"},mac)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Client MAC",
+        "multi": false,
+        "name": "selected_mac",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"asus_router_wifi_client_rssi_dbm|asus_router_wired_client_info\"},mac)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
@@ -1222,5 +1401,5 @@
   "timezone": "browser",
   "title": "ASUS ZenWiFi XT9 — Mesh Network",
   "uid": "asus-zenwifi-xt9",
-  "version": 1
+  "version": 2
 }
