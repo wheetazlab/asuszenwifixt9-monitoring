@@ -186,6 +186,8 @@ class RouterCollector:
         # (the router writes hourly aggregates, not real-time rows)
         self._traffic_last_ts: int = int(time.time()) - 90000
         self._traffic_cumulative: dict[str, dict[str, int]] = {}
+        # Track when we last pruned the TrafficAnalyzer DB (run once every 6 hours)
+        self._traffic_last_prune: int = 0
 
     def close(self) -> None:
         for client in self._ssh.values():
@@ -388,6 +390,19 @@ class RouterCollector:
 
         # ── Batch 5: router-only SQLite DB queries ─────────────────────────
         if node.is_router:
+            # Prune TrafficAnalyzer DB every 6 hours to prevent it from hitting
+            # the -d size cap and stopping writes. Keep 7 days of data.
+            now = int(time.time())
+            if now - self._traffic_last_prune > 21600:
+                prune_cutoff = now - (7 * 86400)
+                ssh.run(
+                    f'sqlite3 /jffs/.sys/TrafficAnalyzer/TrafficAnalyzer.db '
+                    f'"DELETE FROM traffic WHERE timestamp < {prune_cutoff};" 2>/dev/null; '
+                    f'sqlite3 /jffs/.sys/TrafficAnalyzer/TrafficAnalyzer.db "VACUUM;" 2>/dev/null'
+                )
+                self._traffic_last_prune = now
+                logger.info("TrafficAnalyzer DB pruned (kept 7 days, cutoff ts=%d)", prune_cutoff)
+
             db_raw = ssh.run(_build_db_batch(self._traffic_last_ts))
             db_sec = parsers.split_sections(db_raw)
 
