@@ -65,8 +65,11 @@ Each scrape performs **3 batched SSH exec calls per node** to minimise connectio
 | `asus_router_wifi_client_tx_failures_total` | Counter | Per-client TX failures |
 | `asus_router_wifi_client_idle_seconds` | Gauge | Per-client idle time |
 | `asus_router_scrape_duration_seconds` | Gauge | Time taken for one full scrape |
+| `asus_router_wired_client_info` | Gauge | Wired client presence (label-only, value=1) |
+| `asus_router_traffic_analyzer_tx_bytes_total` | Counter | Cumulative TX bytes per MAC from TrafficAnalyzer DB |
+| `asus_router_traffic_analyzer_rx_bytes_total` | Counter | Cumulative RX bytes per MAC from TrafficAnalyzer DB |
 
-Labels: most metrics carry `node` (`router` or `extender`). WiFi metrics carry `radio` (e.g. `eth4`) and `band` (e.g. `2.4GHz`). Per-client metrics also carry `mac` and `hostname` (resolved from DHCP leases).
+Labels: most metrics carry `node` (`router` or `extender`). WiFi metrics carry `radio` (e.g. `eth4`) and `band` (e.g. `2.4GHz`). Per-client metrics also carry `mac` and `hostname` (resolved from DHCP leases). TrafficAnalyzer metrics carry `mac`, `hostname`, and `ip`.
 
 ---
 
@@ -75,6 +78,7 @@ Labels: most metrics carry `node` (`router` or `extender`). WiFi metrics carry `
 ```
 .
 ├── collector/
+│   ├── README.md        # collector package internals & scrape model
 │   ├── __init__.py
 │   ├── config.py        # env-var configuration + static interface/MAC lists
 │   ├── ssh_client.py    # paramiko wrapper with auto-reconnect
@@ -173,4 +177,41 @@ Built automatically on push to `main` and published to:
 ```
 ghcr.io/wheetazlab/asuszenwifixt9-monitoring:latest
 ```
+
+---
+
+## TrafficAnalyzer DB pruning
+
+The ASUS firmware starts `TrafficAnalyzer` with a `-d 14336` flag (14 MB size cap). When the SQLite DB reaches that cap the daemon **silently stops writing** rather than rotating old rows — traffic metrics go dark and no error is logged anywhere on the router.
+
+**Fix (v0.0.8):** On startup the exporter SSHes to the router and calls `_ensure_prune_cron()`, which
+
+1. Writes `/jffs/scripts/prune_trafficanalyzer.sh` — a tiny ash script that deletes rows older than 7 days and runs `VACUUM` to shrink the file.
+2. Registers a **daily midnight cron job** via `cru a prune_trafficanalyzer '0 0 * * * …'`.
+3. Appends a boot-time guard to `/jffs/scripts/services-start` so the cron job survives router reboots.
+
+The whole operation is idempotent — if the cron job already exists (`cru l` check), nothing is written. Both `/jffs/scripts/` paths live on the `/jffs` flash partition which persists across reboots and power cycles.
+
+---
+
+## Changelog
+
+### v0.0.8 — TrafficAnalyzer DB auto-prune & startup lookback fix
+- **feat**: `_ensure_prune_cron()` — registers a daily cron job on the router at exporter startup to keep the TrafficAnalyzer DB under the firmware size cap ([see above](#trafficanalyzer-db-pruning))
+- **fix**: `_traffic_last_ts` initialised to `now − 90000 s` (25 h) so the exporter immediately picks up existing hourly DB rows after a restart, rather than waiting up to an hour for new writes
+
+### v0.0.7 — WebHistory removal
+- Removed partially-implemented WebHistory (WRS) feature; daemon not reliably available across firmware versions
+
+### v0.0.6 — Link speeds, TrafficAnalyzer bandwidth, wired client info
+- Added `asus_router_wired_client_info` with port, MAC, hostname, link-speed labels
+- Added `asus_router_traffic_analyzer_{tx,rx}_bytes_total` counters from the router's SQLite TrafficAnalyzer DB
+- Added wired client link-speed detection via `/sys/class/net/<port>/speed`
+
+### v0.0.5 — Wired client radio/band labels
+- Bug fix: added missing `band` and `radio` labels to `asus_router_wired_client_info`
+
+### v0.0.4 — Grafana dashboard drill-down
+- Client drill-down from hostname to MAC in the All Clients table
+- TrafficAnalyzer columns added to the dashboard
 
