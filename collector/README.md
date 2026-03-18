@@ -80,16 +80,17 @@ Labels: `mac`, `hostname` (from DHCP leases), `ip` (from DHCP leases).
 
 ---
 
-### Databases not yet migrated
+### Other databases on the router
 
-Two additional SQLite databases exist on the router and are candidates for future migration away from SSH command parsing:
+The `/jffs/.sys/` directory contains three other SQLite databases. None are currently used by this exporter:
 
-| Database | Path on router | What it would replace | Status |
-|----------|---------------|-----------------------|--------|
-| `stainfo.db` | `/jffs/.sys/stainfo/stainfo.db` | **Batch 3 (STA info)** — replaces a loop of up to 50+ `wl sta_info <MAC>` SSH calls per scrape with a single SQL query. Both nodes' clients in one shot. Biggest potential win. | Not implemented |
-| `wifi_detect.db` | `/jffs/.sys/wifi_detect/wifi_detect.db` | **Noise floor** — replaces `wl status` parsing per radio | Not implemented |
+| Database | Path | Schema summary | Notes |
+|----------|------|----------------|-------|
+| `WebHistory.db` | `/jffs/.sys/WebHistory/WebHistory.db` | `history(mac, timestamp, url)` | DNS/web browsing history per client MAC. Populated only when the WRS (Web Reputation Service) daemon is running — not available on all firmware versions. |
+| `AiProtectionMonitor.db` | `/jffs/.sys/AiProtectionMonitor/AiProtectionMonitor.db` | `monitor(timestamp, type, mac, src, dst, cat_id, severity)` | AiProtection security threat events. Empty if no threats have been detected. |
+| `nt_db.db` | `/jffs/.sys/nc/nt_db.db` | `nt_center(tstamp, event, status, msg)` | Router notification/event log. Not useful for Prometheus metrics. |
 
-These are left for a future iteration. The SSH command batches remain the current source for everything those tables would cover.
+> **Note:** `stainfo.db` and `wifi_detect.db` were considered as migration targets for per-client WiFi stats and noise floor data respectively. These databases do **not exist** on this firmware — per-client sta_info and noise floor data are only available via `wl sta_info` and `wl chanim_stats` SSH commands.
 
 ---
 
