@@ -19,7 +19,7 @@ Python package that implements the Prometheus custom collector.
 
 ## Data sources
 
-The exporter currently pulls data from **two distinct sources**: live SSH commands run against the router/extender, and a SQLite database that the router's firmware maintains locally.
+The exporter currently pulls data from **three distinct sources**: live SSH commands run against the router/extender, and a SQLite database that the router's firmware maintains locally.
 
 ### Source 1 — SSH commands (both nodes)
 
@@ -39,11 +39,11 @@ All system, WiFi, and wired metrics come from commands executed over SSH. Multip
 | | `cat /proc/net/arp` | Resolves wired client MACs to IPs |
 | | `/sys/class/net/eth{1,2,3}/speed` | Link speed (10M / 100M / 1G / 2.5G / 10G) |
 | | _(combined above)_ | `asus_router_wired_client_info` |
-| **WiFi radio** | `wl -i <iface> status` | `asus_router_backhaul_{rssi_dbm,snr_db}`, `asus_router_wifi_noise_dbm` |
+| **WiFi radio** | `wl -i <iface> status` | `asus_router_backhaul_{rssi_dbm,snr_db}` |
 | | `wl -i <iface> chanim_stats` | `asus_router_wifi_channel_utilization_percent`, `asus_router_wifi_channel_{goodtx,badtx,glitch}_total` |
-| | `wl -i <iface> assoclist` | Enumerates connected client MACs (input to the STA info batch) |
-| | _(combined above)_ | `asus_router_wifi_clients` |
-| **STA info** | `wl -i <iface> sta_info <MAC>` × every client | `asus_router_wifi_client_rssi_dbm`, `asus_router_wifi_client_{tx,rx}_bytes_total`, `asus_router_wifi_client_{tx,rx}_rate_kbps`, `asus_router_wifi_client_tx_failures_total`, `asus_router_wifi_client_idle_seconds` |
+| | ~~`wl -i <iface> assoclist`~~ | ~~Enumerates connected client MACs (input to the STA info batch)~~ **Removed** — client enumeration is now via stainfo.db |
+| **STA info** | ~~`wl -i <iface> sta_info <MAC>` × every client~~ | **Replaced by stainfo.db** — see Source 3. `asus_router_wifi_client_rssi_dbm`, `asus_router_wifi_client_{tx,rx}_bytes_total`, `asus_router_wifi_client_{tx,rx}_rate_kbps`, `asus_router_wifi_client_conn_time_seconds`, `asus_router_wifi_{clients,associated}` |
+| | ~~`wl -i <iface> chanim_stats`~~ (noise only) | **Replaced by wifi_detect.db** — see Source 4. `asus_router_wifi_noise_dbm` |
 
 `wl` is a Broadcom proprietary WiFi utility (`/usr/sbin/wl`) built into the ASUS firmware. There is no standard Linux equivalent.
 
@@ -80,6 +80,64 @@ Labels: `mac`, `hostname` (from DHCP leases), `ip` (from DHCP leases).
 
 ---
 
+### Source 2 — stainfo.db (router query, covers both nodes)
+
+> **Database location on the router:** `/tmp/.diag/stainfo.db`  
+> **Written by:** `conn_diag` firmware process  
+> **Write cadence:** every ~60 seconds  
+> **Table:** `DATA_INFO` — one row per currently-associated client per snapshot
+
+Replaces the entire `wl assoclist` + `wl sta_info <MAC>` loop.  One SQL query returns all clients from **both the router and extender** in a single SSH exec:
+
+```sql
+SELECT sta_mac, node_type, node_ip, sta_band, sta_rssi, sta_active,
+       sta_tx, sta_rx, sta_tbyte, sta_rbyte, conn_time, txpr, conn_if, data_time
+FROM DATA_INFO
+WHERE data_time >= (SELECT MAX(data_time) - 2 FROM DATA_INFO)
+```
+
+The `- 2` window is needed because the router (`node_type=C`) and extender (`node_type=R`) write to the same DB ~1 second apart.
+
+| DB column | Unit | Metric produced |
+|-----------|------|-----------------|
+| `sta_rssi` | dBm | `asus_router_wifi_client_rssi_dbm` |
+| `sta_tx` / `sta_rx` | Mbps PHY rate | `asus_router_wifi_client_{tx,rx}_rate_kbps` (×1000) |
+| `sta_tbyte` / `sta_rbyte` | bytes since assoc | `asus_router_wifi_client_{tx,rx}_bytes_total` |
+| `conn_time` | seconds | `asus_router_wifi_client_conn_time_seconds` |
+| `txpr` | retry count | `asus_router_wifi_client_tx_retries_total` |
+| `conn_if` | interface name | `radio` label (e.g. `eth5`, `wl1.1`) |
+| `node_type` | C / R | `node` label (`router` / `extender`) |
+| `sta_band` | 2G / 5G / 5G1 | `band` label (`2.4GHz` / `5GHz` / `5GHz-2`) |
+
+Wifi client counts (`wifi_clients`, `wifi_associated`) are also derived here by grouping rows on `(node, conn_if, band)`. Backhaul MACs (`ROUTER_BACKHAUL_MACS`) are excluded from `wifi_clients` but counted in `wifi_associated`.
+
+If the latest `data_time` is more than 180 seconds old, all client metrics are skipped and a warning is logged.
+
+---
+
+### Source 3 — wifi_detect.db (router query, covers both nodes)
+
+> **Database location on the router:** `/tmp/.diag/wifi_detect.db`  
+> **Written by:** `conn_diag` firmware process  
+> **Write cadence:** every ~60 seconds  
+> **Table:** `DATA_INFO` — one row per radio interface per snapshot (6 rows total: 3 radios × 2 nodes)
+
+Replaces per-node `wl status` and `wl chanim_stats` noise floor parsing. One SQL query returns noise floor for all 6 radios on both nodes:
+
+```sql
+SELECT node_type, node_ip, band, ifname, noise, txop, tx_byte, rx_byte, glitch, txfail, data_time
+FROM DATA_INFO
+WHERE data_time >= (SELECT MAX(data_time) - 2 FROM DATA_INFO)
+```
+
+| DB column | Unit | Metric produced |
+|-----------|------|-----------------|
+| `noise` | dBm | `asus_router_wifi_noise_dbm` |
+
+Channel utilisation percentages (`inbss`, `obss`, `tx`, etc.) are NOT available in this DB (`chanim` column is always `-1`) — they still come from `wl chanim_stats` in Batch 2.
+
+---
+
 ### Other databases on the router
 
 The `/jffs/.sys/` directory contains three other SQLite databases. None are currently used by this exporter:
@@ -90,7 +148,7 @@ The `/jffs/.sys/` directory contains three other SQLite databases. None are curr
 | `AiProtectionMonitor.db` | `/jffs/.sys/AiProtectionMonitor/AiProtectionMonitor.db` | `monitor(timestamp, type, mac, src, dst, cat_id, severity)` | AiProtection security threat events. Empty if no threats have been detected. |
 | `nt_db.db` | `/jffs/.sys/nc/nt_db.db` | `nt_center(tstamp, event, status, msg)` | Router notification/event log. Not useful for Prometheus metrics. |
 
-> **Note:** `stainfo.db` and `wifi_detect.db` were considered as migration targets for per-client WiFi stats and noise floor data respectively. These databases do **not exist** on this firmware — per-client sta_info and noise floor data are only available via `wl sta_info` and `wl chanim_stats` SSH commands.
+> **Note:** `stainfo.db` and `wifi_detect.db` live at `/tmp/.diag/` (not `/jffs/.sys/`) and are written by the `conn_diag` process. They are now **fully implemented** — see Sources 2 and 3 above.
 
 ---
 
@@ -99,9 +157,17 @@ The `/jffs/.sys/` directory contains three other SQLite databases. None are curr
 Each Prometheus scrape triggers `RouterCollector.collect()`, which
 
 1. **Iterates over every configured node** (router + extender) and calls `_collect_node(node, metrics)`.
-2. Inside `_collect_node`, fires the four SSH command batches (System, Wired, WiFi radio, STA info) in sequence. Router and extender run independently.
-3. **Router only** — runs the TrafficAnalyzer SQLite query via `sqlite3` over SSH and merges results into cumulative counters.
-4. Appends a `asus_router_scrape_duration_seconds` gauge, then yields all metrics.
+2. Inside `_collect_node`, fires three SSH exec calls per node:
+   - **System batch** — `/proc` + `/sys` + DHCP leases (identical for both nodes)
+   - **WiFi batch** — `wl status` + `wl chanim_stats` per radio (backhaul RSSI, channel utilisation; assoclist removed)
+   - **Wired batch** — `brctl showmacs`, ARP table, link speeds
+3. **Router only** — fires one additional SSH exec containing three SQLite queries bundled together:
+   - `TrafficAnalyzer.db` — hourly per-device bandwidth totals
+   - `stainfo.db` — current per-client RSSI, rates, bytes, conn_time for **all clients on both nodes**
+   - `wifi_detect.db` — current per-radio noise floor for **all radios on both nodes**
+4. Appends `asus_router_scrape_duration_seconds`, then yields all metrics.
+
+Total SSH exec calls per scrape: **7** (3 per node × 2 nodes + 1 DB exec on router). Previously this was up to **60+** when a full house of WiFi clients triggered individual `wl sta_info` calls.
 
 ---
 

@@ -199,6 +199,13 @@ The whole operation is idempotent — if the cron job already exists (`cru l` ch
 
 ## Changelog
 
+### v0.0.9 — Replace `wl assoclist`/`wl sta_info` with SQLite DB queries
+- **feat**: Per-client WiFi metrics now sourced from `/tmp/.diag/stainfo.db` (written by the `conn_diag` firmware daemon) instead of individual `wl -i <iface> sta_info <MAC>` SSH calls — reduces per-scrape SSH execs from up to 60+ down to 7
+- **feat**: WiFi noise floor (`asus_router_wifi_noise_dbm`) now sourced from `/tmp/.diag/wifi_detect.db` instead of `wl chanim_stats` parsing
+- **feat**: New metric `asus_router_wifi_client_conn_time_seconds` — seconds a client has been continuously associated
+- **feat**: `asus_router_wifi_associated` gauge now covers all nodes simultaneously (both router and extender data in one query)
+- **refactor**: Removed `_build_sta_batch()` entirely; `_build_wifi_batch()` no longer takes `client_ifaces`; `_build_db_batch()` now queries all three DBs in a single bundled SSH exec (router only)
+
 ### v0.0.8 — TrafficAnalyzer DB auto-prune & startup lookback fix
 - **feat**: `_ensure_prune_cron()` — registers a daily cron job on the router at exporter startup to keep the TrafficAnalyzer DB under the firmware size cap ([see above](#trafficanalyzer-db-pruning))
 - **fix**: `_traffic_last_ts` initialised to `now − 90000 s` (25 h) so the exporter immediately picks up existing hourly DB rows after a restart, rather than waiting up to an hour for new writes

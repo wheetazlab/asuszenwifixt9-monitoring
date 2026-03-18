@@ -62,16 +62,11 @@ for p in eth1 eth2 eth3; do printf "%s %s\n" "$p" "$(cat /sys/class/net/$p/speed
 """
 
 
-def _build_wifi_batch(
-    radio_ifaces: list[tuple[str, str]],
-    client_ifaces: list[tuple[str, str]] | None = None,
-) -> str:
+def _build_wifi_batch(radio_ifaces: list[tuple[str, str]]) -> str:
     """
-    Build a single SSH command:
-    - status + chanim on radio_ifaces (physical radios — for backhaul/noise/chanim)
-    - assoclist on client_ifaces (virtual BSS on extender, same as radio on router)
+    Build a single SSH command for WiFi radio status and channel stats.
+    Per-client data (assoclist + sta_info) is replaced by stainfo.db queries.
     """
-    eff_client = client_ifaces if client_ifaces is not None else radio_ifaces
     parts: list[str] = []
     for iface, _ in radio_ifaces:
         parts += [
@@ -80,34 +75,25 @@ def _build_wifi_batch(
             f"echo __chanim_{iface}__",
             f"wl -i {iface} chanim_stats 2>/dev/null",
         ]
-    for iface, _ in eff_client:
-        parts += [
-            f"echo __assoclist_{iface}__",
-            f"wl -i {iface} assoclist 2>/dev/null",
-        ]
-    return "\n".join(parts)
-
-
-def _build_sta_batch(ifaces_and_macs: list[tuple[str, str, list[str]]]) -> str:
-    """Build a single SSH command that dumps sta_info for all clients on all radios."""
-    parts: list[str] = []
-    for iface, _band, macs in ifaces_and_macs:
-        for mac in macs:
-            safe_key = mac.replace(":", "_")
-            parts += [
-                f"echo __sta_{iface}_{safe_key}__",
-                f"wl -i {iface} sta_info {mac} 2>/dev/null",
-            ]
     return "\n".join(parts)
 
 
 def _build_db_batch(traffic_ts: int) -> str:
-    """Build SSH command to query TrafficAnalyzer SQLite DB on the router."""
+    """Build SSH command to query all SQLite DBs on the router in one exec."""
     return (
         "echo __traffic_analyzer__\n"
         f'sqlite3 /jffs/.sys/TrafficAnalyzer/TrafficAnalyzer.db '
         f'"SELECT mac,SUM(tx),SUM(rx),MAX(timestamp) FROM traffic '
         f'WHERE timestamp>{traffic_ts} GROUP BY mac;" 2>/dev/null\n'
+        "echo __stainfo__\n"
+        'sqlite3 /tmp/.diag/stainfo.db '
+        '"SELECT sta_mac,node_type,node_ip,sta_band,sta_rssi,sta_active,'
+        'sta_tx,sta_rx,sta_tbyte,sta_rbyte,conn_time,txpr,conn_if,data_time '
+        'FROM DATA_INFO WHERE data_time>=(SELECT MAX(data_time)-2 FROM DATA_INFO);" 2>/dev/null\n'
+        "echo __wifi_detect__\n"
+        'sqlite3 /tmp/.diag/wifi_detect.db '
+        '"SELECT node_type,node_ip,band,ifname,noise,txop,tx_byte,rx_byte,glitch,txfail,data_time '
+        'FROM DATA_INFO WHERE data_time>=(SELECT MAX(data_time)-2 FROM DATA_INFO);" 2>/dev/null\n'
     )
 
 
@@ -330,11 +316,9 @@ class RouterCollector:
             m.rx_drops.add_metric(lbl, stats["rx_drop"])
             m.tx_drops.add_metric(lbl, stats["tx_drop"])
 
-        # ── Batch 2: WiFi radio summaries + client assoclist ─────────────────
-        # radio_ifaces (eth4/5/6) → status + chanim (backhaul RSSI, noise, channel util)
-        # client_ifaces (wl0.1/1.1/2.1 on extender, same on router) → assoclist
-        eff_client_ifaces = node.client_ifaces or node.wifi_ifaces
-        wifi_raw = ssh.run(_build_wifi_batch(node.wifi_ifaces, node.client_ifaces))
+        # ── Batch 2: WiFi radio status + chanim ─────────────────────────────
+        # Per-client data (assoclist + sta_info) now comes from stainfo.db below.
+        wifi_raw = ssh.run(_build_wifi_batch(node.wifi_ifaces))
         wifi_sec = parsers.split_sections(wifi_raw)
 
         # ── Radio status / chanim (physical interfaces) ───────────────────────
@@ -342,8 +326,6 @@ class RouterCollector:
             radio_lbl = [node.name, iface, band]
 
             status = parsers.parse_wifi_status(wifi_sec.get(f"status_{iface}", ""))
-            if "noise_dbm" in status:
-                m.wifi_noise.add_metric(radio_lbl, status["noise_dbm"])
             if "channel_util_pct" in status:
                 m.wifi_chan_util.add_metric(
                     [node.name, iface, band, "qbss"], status["channel_util_pct"]
@@ -361,8 +343,6 @@ class RouterCollector:
                         m.wifi_chan_util.add_metric(
                             [node.name, iface, band, util_type], chanim[key]
                         )
-                if "knoise_dbm" in chanim:
-                    m.wifi_noise.add_metric(radio_lbl, chanim["knoise_dbm"])
                 if "goodtx" in chanim:
                     m.wifi_goodtx.add_metric(radio_lbl, chanim["goodtx"])
                 if "badtx" in chanim:
@@ -370,50 +350,7 @@ class RouterCollector:
                 if "glitch" in chanim:
                     m.wifi_glitch.add_metric(radio_lbl, chanim["glitch"])
 
-        # ── Client assoclist (virtual BSS on extender, physical on router) ────
-        iface_clients: list[tuple[str, str, list[str]]] = []
-        for iface, band in eff_client_ifaces:
-            all_macs = parsers.parse_assoclist(wifi_sec.get(f"assoclist_{iface}", ""))
-            client_macs = [mac for mac in all_macs if mac not in node.backhaul_macs]
-            m.wifi_clients.add_metric([node.name, iface, band], float(len(client_macs)))
-            m.wifi_associated.add_metric([node.name, iface, band], float(len(all_macs)))
-            iface_clients.append((iface, band, client_macs))
-
-        # ── Batch 3: per-client sta_info (all radios, all clients in one exec) ──
-        all_client_macs_exist = any(macs for _, _, macs in iface_clients)
-        if all_client_macs_exist:
-            sta_raw = ssh.run(_build_sta_batch(iface_clients))
-            sta_sec = parsers.split_sections(sta_raw)
-
-            for iface, band, client_macs in iface_clients:
-                for mac in client_macs:
-                    safe_key = mac.replace(":", "_")
-                    sta = parsers.parse_sta_info(sta_sec.get(f"sta_{iface}_{safe_key}", ""))
-                    if not sta:
-                        continue
-                    dhcp = self._dhcp_map.get(mac, {})
-                    hostname = dhcp.get("hostname", "")
-                    ip = dhcp.get("ip", "")
-                    cl = [node.name, iface, band, mac, hostname, ip]
-
-                    if "rssi_dbm" in sta:
-                        m.client_rssi.add_metric(cl, sta["rssi_dbm"])
-                    if "tx_bytes" in sta:
-                        m.client_tx_bytes.add_metric(cl, sta["tx_bytes"])
-                    if "rx_bytes" in sta:
-                        m.client_rx_bytes.add_metric(cl, sta["rx_bytes"])
-                    if "tx_rate_kbps" in sta:
-                        m.client_tx_rate.add_metric(cl, sta["tx_rate_kbps"])
-                    if "rx_rate_kbps" in sta:
-                        m.client_rx_rate.add_metric(cl, sta["rx_rate_kbps"])
-                    if "tx_failures" in sta:
-                        m.client_tx_failures.add_metric(cl, sta["tx_failures"])
-                    if "tx_retries" in sta:
-                        m.client_tx_retries.add_metric(cl, sta["tx_retries"])
-                    if "idle_seconds" in sta:
-                        m.client_idle.add_metric(cl, sta["idle_seconds"])
-
-        # ── Batch 4: wired clients (bridge FDB + ARP) ────────────────────
+        # ── Batch 3: wired clients (bridge FDB + ARP) ─────────────────────
         wired_raw = ssh.run(_WIRED_BATCH)
         wired_sec = parsers.split_sections(wired_raw)
 
@@ -459,6 +396,52 @@ class RouterCollector:
             for mac, counts in self._traffic_cumulative.items():
                 m.traffic_tx_bytes.add_metric([mac], float(counts["tx"]))
                 m.traffic_rx_bytes.add_metric([mac], float(counts["rx"]))
+
+            # ── stainfo.db: per-client WiFi stats for both nodes ─────────────
+            stainfo_rows = parsers.parse_stainfo_db(db_sec.get("stainfo", ""))
+            now_ts = int(time.time())
+            if stainfo_rows and now_ts - stainfo_rows[0]["data_time"] > 180:
+                logger.warning(
+                    "stainfo.db data is %d s old — skipping WiFi client metrics",
+                    now_ts - stainfo_rows[0]["data_time"],
+                )
+                stainfo_rows = []
+
+            # wifi_clients / wifi_associated counts grouped by (node, radio, band)
+            _iface_totals: dict[tuple, list] = {}
+            for _c in stainfo_rows:
+                _k = (_c["node"], _c["iface"], _c["band"])
+                _t = _iface_totals.setdefault(_k, [0, 0])
+                _t[0] += 1
+                if _c["mac"] not in ROUTER_BACKHAUL_MACS:
+                    _t[1] += 1
+            for _k, (_total, _non_bh) in _iface_totals.items():
+                m.wifi_associated.add_metric(list(_k), float(_total))
+                m.wifi_clients.add_metric(list(_k), float(_non_bh))
+
+            for _c in stainfo_rows:
+                if _c["mac"] in ROUTER_BACKHAUL_MACS:
+                    continue
+                _dhcp = self._dhcp_map.get(_c["mac"], {})
+                _cl = [
+                    _c["node"], _c["iface"], _c["band"], _c["mac"],
+                    _dhcp.get("hostname", ""), _dhcp.get("ip", ""),
+                ]
+                m.client_rssi.add_metric(_cl, _c["rssi"])
+                m.client_tx_bytes.add_metric(_cl, _c["tx_bytes"])
+                m.client_rx_bytes.add_metric(_cl, _c["rx_bytes"])
+                m.client_tx_rate.add_metric(_cl, _c["tx_rate_kbps"])
+                m.client_rx_rate.add_metric(_cl, _c["rx_rate_kbps"])
+                m.client_tx_retries.add_metric(_cl, _c["tx_retries"])
+                m.client_conn_time.add_metric(_cl, _c["conn_time"])
+
+            # ── wifi_detect.db: per-radio noise floor for both nodes ──────────
+            wifi_detect_rows = parsers.parse_wifi_detect_db(db_sec.get("wifi_detect", ""))
+            if wifi_detect_rows and now_ts - wifi_detect_rows[0]["data_time"] > 180:
+                logger.warning("wifi_detect.db data is stale — skipping radio noise")
+                wifi_detect_rows = []
+            for _r in wifi_detect_rows:
+                m.wifi_noise.add_metric([_r["node"], _r["iface"], _r["band"]], _r["noise"])
 
 
 # ---------------------------------------------------------------------------
@@ -651,6 +634,11 @@ class _MetricBag:
             "Seconds since the last packet from this client",
             labels=_CLIENT,
         )
+        self.client_conn_time = GaugeMetricFamily(
+            "asus_router_wifi_client_conn_time_seconds",
+            "Seconds since the client last associated (from stainfo.db)",
+            labels=_CLIENT,
+        )
 
         # -- wired clients --
         self.wired_client_info = GaugeMetricFamily(
@@ -709,6 +697,7 @@ class _MetricBag:
         yield self.client_tx_failures
         yield self.client_tx_retries
         yield self.client_idle
+        yield self.client_conn_time
         yield self.wired_client_info
         yield self.traffic_tx_bytes
         yield self.traffic_rx_bytes

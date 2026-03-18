@@ -486,3 +486,100 @@ def parse_traffic_analyzer(text: str) -> dict[str, dict[str, int]]:
             continue
     return result
 
+
+# ---------------------------------------------------------------------------
+# conn_diag SQLite DB parsers (/tmp/.diag/)
+# ---------------------------------------------------------------------------
+
+# Maps from conn_diag node_type/band codes to human-readable labels
+_NODE_LABEL: dict[str, str] = {"C": "router", "R": "extender"}
+_BAND_LABEL: dict[str, str] = {"2G": "2.4GHz", "5G": "5GHz", "5G1": "5GHz-2"}
+
+
+def parse_stainfo_db(text: str) -> list[dict]:
+    """
+    Parse sqlite3 pipe-separated output from /tmp/.diag/stainfo.db.
+
+    Expected query column order:
+        sta_mac, node_type, node_ip, sta_band, sta_rssi, sta_active,
+        sta_tx, sta_rx, sta_tbyte, sta_rbyte, conn_time, txpr, conn_if, data_time
+
+    node_type: C = router (controller), R = extender (repeater).
+    sta_band:  2G / 5G / 5G1  →  mapped to 2.4GHz / 5GHz / 5GHz-2.
+    sta_tx/rx: PHY rate of last packet in Mbps — multiplied by 1000 to give kbps.
+    sta_tbyte/rbyte: cumulative bytes since association.
+    conn_time: seconds the client has been connected.
+    txpr: TX packets retried (link-quality proxy).
+    conn_if: interface (eth4/eth5/eth6 on router; wl0.1/wl1.1/wl2.1 on extender).
+    data_time: Unix timestamp of the conn_diag write.
+
+    The router and extender write ~1 second apart, so the query should use a
+    2-second window:  WHERE data_time >= (SELECT MAX(data_time)-2 FROM DATA_INFO)
+    """
+    clients: list[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("|")
+        if len(parts) < 14:
+            continue
+        try:
+            clients.append({
+                "mac": parts[0].upper(),
+                "node": _NODE_LABEL.get(parts[1], parts[1]),
+                "band": _BAND_LABEL.get(parts[3], parts[3]),
+                "rssi": float(parts[4]),
+                # sta_tx/rx are in Mbps; multiply by 1000 to match kbps metric names
+                "tx_rate_kbps": float(parts[6]) * 1000.0,
+                "rx_rate_kbps": float(parts[7]) * 1000.0,
+                "tx_bytes": float(parts[8]),
+                "rx_bytes": float(parts[9]),
+                "conn_time": float(parts[10]),
+                "tx_retries": float(parts[11]),
+                "iface": parts[12],
+                "data_time": int(parts[13]),
+            })
+        except (ValueError, IndexError):
+            continue
+    return clients
+
+
+def parse_wifi_detect_db(text: str) -> list[dict]:
+    """
+    Parse sqlite3 pipe-separated output from /tmp/.diag/wifi_detect.db.
+
+    Expected query column order:
+        node_type, node_ip, band, ifname, noise, txop,
+        tx_byte, rx_byte, glitch, txfail, data_time
+
+    node_type: C = router, R = extender.
+    band: 2G / 5G / 5G1 → mapped to 2.4GHz / 5GHz / 5GHz-2.
+    noise: radio noise floor in dBm.
+    txop: TX opportunity utilisation percentage (0–100).
+    glitch: PHY glitch count since daemon start.
+    txfail: TX failure count since daemon start.
+    """
+    radios: list[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("|")
+        if len(parts) < 11:
+            continue
+        try:
+            radios.append({
+                "node": _NODE_LABEL.get(parts[0], parts[0]),
+                "band": _BAND_LABEL.get(parts[2], parts[2]),
+                "iface": parts[3],
+                "noise": float(parts[4]),
+                "txop": float(parts[5]),
+                "glitch": float(parts[8]),
+                "txfail": float(parts[9]),
+                "data_time": int(parts[10]),
+            })
+        except (ValueError, IndexError):
+            continue
+    return radios
+
