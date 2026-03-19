@@ -1820,39 +1820,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "PHY TX (kbps)"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "kbps"
-              },
-              {
-                "id": "custom.width",
-                "value": 130
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "PHY RX (kbps)"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "kbps"
-              },
-              {
-                "id": "custom.width",
-                "value": 130
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "DL (5m)"
+              "options": "Live \u2193"
             },
             "properties": [
               {
@@ -1868,7 +1836,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "UL (5m)"
+              "options": "Live \u2191"
             },
             "properties": [
               {
@@ -1976,7 +1944,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "DL (1h avg)"
+              "options": "Avg \u2193"
             },
             "properties": [
               {
@@ -1992,7 +1960,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "UL (1h avg)"
+              "options": "Avg \u2191"
             },
             "properties": [
               {
@@ -2030,7 +1998,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|Value #[A-I]|mac|node|band|hostname|ip|interface)$"
+              "pattern": "^(Time|Value #[ADEFGHI]|mac|node|band|hostname|ip|interface)$"
             }
           }
         },
@@ -2071,26 +2039,22 @@
               "node": 3,
               "band": 4,
               "interface": 5,
-              "Value #A": 6,
-              "Value #B": 7,
-              "Value #C": 8,
-              "Value #D": 9,
-              "Value #E": 10,
-              "Value #F": 11,
-              "Value #H": 12,
-              "Value #I": 13
+              "Value #A": 5,
+              "Value #D": 6,
+              "Value #E": 7,
+              "Value #F": 8,
+              "Value #H": 9,
+              "Value #I": 10
             },
             "renameByName": {
               "ip": "IP Address",
               "interface": "Port",
               "Value #A": "RSSI (dBm)",
-              "Value #B": "PHY TX (kbps)",
-              "Value #C": "PHY RX (kbps)",
-              "Value #D": "DL (5m)",
-              "Value #E": "UL (5m)",
+              "Value #D": "Live \u2193",
+              "Value #E": "Live \u2191",
               "Value #F": "Connected For",
-              "Value #H": "DL (1h avg)",
-              "Value #I": "UL (1h avg)"
+              "Value #H": "Avg \u2193",
+              "Value #I": "Avg \u2191"
             }
           }
         }

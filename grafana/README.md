@@ -38,7 +38,7 @@ kubectl create configmap asus-zenwifi-xt9-dashboard \
 | Memory Usage | Time series | RAM usage per node |
 | CPU Load | Time series | 1/5/15-minute load averages |
 | Temperature | Time series | Board temperature per node |
-| All Clients | Table | Per-client: hostname, IP, MAC, node, band, RSSI, TX/RX rate, download, upload, connected for |
+| All Clients | Table | Per-client: hostname, IP, MAC, node, band, RSSI, live throughput (5m), avg throughput (1h), connected for |
 
 ## Client Table
 
@@ -52,10 +52,10 @@ The **All Clients** table merges six instant-query metrics by shared labels (`ma
 | node | label (`router` / `extender`) | — |
 | band | label (`2.4GHz` / `5GHz` / `5GHz-2`) | — |
 | RSSI | `asus_router_wifi_client_rssi_dbm` | dBm (colour-coded) |
-| TX Rate | `asus_router_wifi_client_tx_rate_kbps` | kbps |
-| RX Rate | `asus_router_wifi_client_rx_rate_kbps` | kbps |
-| Download | `rate(asus_router_wifi_client_rx_bytes_total[5m]) * 8` | bps |
-| Upload | `rate(asus_router_wifi_client_tx_bytes_total[5m]) * 8` | bps |
+| Live ↓ | `rate(asus_router_wifi_client_rx_bytes_total[5m]) * 8` | bps — actual inbound throughput last 5 min |
+| Live ↑ | `rate(asus_router_wifi_client_tx_bytes_total[5m]) * 8` | bps — actual outbound throughput last 5 min |
+| Avg ↓ | `rate(asus_router_traffic_analyzer_rx_bytes_total[1h]) * 8` | bps — TrafficAnalyzer 1-hour average inbound |
+| Avg ↑ | `rate(asus_router_traffic_analyzer_tx_bytes_total[1h]) * 8` | bps — TrafficAnalyzer 1-hour average outbound |
 | Connected For | `asus_router_wifi_client_conn_time_seconds` | s |
 
 RSSI cells use a gradient colour: red below −70 dBm, yellow −70 to −55 dBm, green above −55 dBm.
