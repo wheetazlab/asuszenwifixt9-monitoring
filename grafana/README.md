@@ -52,6 +52,8 @@ The **All Clients** table merges six instant-query metrics by shared labels (`ma
 | node | label (`router` / `extender`) | — |
 | band | label (`2.4GHz` / `5GHz` / `5GHz-2`) | — |
 | RSSI | `asus_router_wifi_client_rssi_dbm` | dBm (colour-coded) |
+| Link ↓ (kbps) | `asus_router_wifi_client_tx_rate_kbps` | kbps — WiFi PHY TX rate (asymmetric) or wired link speed (symmetric) |
+| Link ↑ (kbps) | `asus_router_wifi_client_rx_rate_kbps` | kbps — WiFi PHY RX rate (asymmetric) or wired link speed (symmetric) |
 | Live ↓ | `rate(asus_router_wifi_client_rx_bytes_total[5m]) * 8` | bps — actual inbound throughput last 5 min |
 | Live ↑ | `rate(asus_router_wifi_client_tx_bytes_total[5m]) * 8` | bps — actual outbound throughput last 5 min |
 | Avg ↓ | `rate(asus_router_traffic_analyzer_rx_bytes_total[1h]) * 8` | bps — TrafficAnalyzer 1-hour average inbound |

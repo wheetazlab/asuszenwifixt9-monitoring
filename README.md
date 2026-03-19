@@ -33,11 +33,12 @@ graph LR
     pod -->|"SSH :2222\n3 batched execs"| extender
 ```
 
-Each scrape performs **3 batched SSH exec calls per node** to minimise connection overhead:
+Each scrape performs **4 SSH exec calls on the router, 3 on the extender** (7 total) to minimise connection overhead:
 
 1. **System batch** — `/proc/loadavg`, `/proc/uptime`, `/proc/meminfo`, `/proc/stat`, thermal zone, `/proc/net/dev`, DHCP leases
-2. **WiFi radio batch** — `wl assoclist`, `wl status`, `wl chanim_stats` for every radio (eth4/eth5/eth6), all in one exec
-3. **Per-client sta_info batch** — all `wl sta_info <MAC>` calls for all radios in one exec
+2. **WiFi radio batch** — `wl status`, `wl chanim_stats` for every radio (eth4/eth5/eth6)
+3. **Wired client batch** — `/sys/class/net/<port>/speed`, bridge FDB, ARP/DHCP lookup per wired port
+4. **SQLite DB batch** _(router only)_ — `stainfo.db` (per-client WiFi PHY rates, RSSI, conn time), `wifi_detect.db` (noise floor), `traffic_analyzer.db` (cumulative bandwidth)
 
 ---
 
@@ -63,7 +64,7 @@ Each scrape performs **3 batched SSH exec calls per node** to minimise connectio
 | `asus_router_wifi_client_{tx,rx}_bytes_total` | Counter | Per-client bytes |
 | `asus_router_wifi_client_{tx,rx}_rate_kbps` | Gauge | Per-client PHY rate |
 | `asus_router_wifi_client_tx_failures_total` | Counter | Per-client TX failures |
-| `asus_router_wifi_client_idle_seconds` | Gauge | Per-client idle time |
+| `asus_router_wifi_client_conn_time_seconds` | Gauge | Per-client continuous association time |
 | `asus_router_scrape_duration_seconds` | Gauge | Time taken for one full scrape |
 | `asus_router_wired_client_info` | Gauge | Wired client presence (label-only, value=1) |
 | `asus_router_traffic_analyzer_tx_bytes_total` | Counter | Cumulative TX bytes per MAC from TrafficAnalyzer DB |
@@ -198,6 +199,12 @@ The whole operation is idempotent — if the cron job already exists (`cru l` ch
 ---
 
 ## Changelog
+
+### v0.0.10 — Wired link speed as PHY rate; All Clients table Link ↓/↑ columns
+- **feat**: `collector.py` now emits `asus_router_wifi_client_{tx,rx}_rate_kbps` for wired clients using link speed (Mbps × 1000 → kbps, symmetric since wired is full-duplex)
+- **feat**: Dashboard **All Clients** table gains `Link ↓ (kbps)` and `Link ↑ (kbps)` columns — populated by WiFi PHY rate (asymmetric) for wireless clients and link speed for wired clients
+- **fix**: Dashboard `filterByValue` transformation drops rows with no `node` label, removing TrafficAnalyzer-only orphan rows from the table
+- **fix**: Dashboard column names clarified — `DL/UL (5m)` → `Live ↓/↑`, `DL/UL (1h avg)` → `Avg ↓/↑`
 
 ### v0.0.9 — Replace `wl assoclist`/`wl sta_info` with SQLite DB queries
 - **feat**: Per-client WiFi metrics now sourced from `/tmp/.diag/stainfo.db` (written by the `conn_diag` firmware daemon) instead of individual `wl -i <iface> sta_info <MAC>` SSH calls — reduces per-scrape SSH execs from up to 60+ down to 7
