@@ -1820,7 +1820,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "TX Rate (kbps)"
+              "options": "PHY TX (kbps)"
             },
             "properties": [
               {
@@ -1836,7 +1836,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "RX Rate (kbps)"
+              "options": "PHY RX (kbps)"
             },
             "properties": [
               {
@@ -1852,7 +1852,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Download"
+              "options": "DL (5m)"
             },
             "properties": [
               {
@@ -1868,7 +1868,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Upload"
+              "options": "UL (5m)"
             },
             "properties": [
               {
@@ -1976,7 +1976,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "DL (Traffic)"
+              "options": "DL (1h avg)"
             },
             "properties": [
               {
@@ -1992,7 +1992,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "UL (Traffic)"
+              "options": "UL (1h avg)"
             },
             "properties": [
               {
@@ -2039,6 +2039,24 @@
           "options": {}
         },
         {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "fieldName": "node",
+                "config": {
+                  "id": "regex",
+                  "options": {
+                    "value": ".+"
+                  }
+                }
+              }
+            ],
+            "match": "all",
+            "type": "include"
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
@@ -2066,13 +2084,13 @@
               "ip": "IP Address",
               "interface": "Port",
               "Value #A": "RSSI (dBm)",
-              "Value #B": "TX Rate (kbps)",
-              "Value #C": "RX Rate (kbps)",
-              "Value #D": "Download",
-              "Value #E": "Upload",
+              "Value #B": "PHY TX (kbps)",
+              "Value #C": "PHY RX (kbps)",
+              "Value #D": "DL (5m)",
+              "Value #E": "UL (5m)",
               "Value #F": "Connected For",
-              "Value #H": "DL (Traffic)",
-              "Value #I": "UL (Traffic)"
+              "Value #H": "DL (1h avg)",
+              "Value #I": "UL (1h avg)"
             }
           }
         }
