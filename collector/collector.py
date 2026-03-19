@@ -377,8 +377,16 @@ class RouterCollector:
             # Skip MACs with no IP — likely an unmanaged switch's own MAC
             if not ip:
                 continue
-            speed = _speed_label(speed_map.get(iface, 0))
+            speed_mbps = speed_map.get(iface, 0)
+            speed = _speed_label(speed_mbps)
             m.wired_client_info.add_metric([node.name, "eth", speed, iface, mac, hostname, ip], 1.0)
+            # Emit symmetric link speed as PHY rate so the All Clients table
+            # has Link ↓/↑ values for wired clients just like WiFi clients do.
+            if speed_mbps > 0:
+                speed_kbps = float(speed_mbps * 1000)
+                _wl = [node.name, "eth", speed, mac, hostname, ip]
+                m.client_tx_rate.add_metric(_wl, speed_kbps)
+                m.client_rx_rate.add_metric(_wl, speed_kbps)
 
         # ── Batch 5: router-only SQLite DB queries ─────────────────────────
         if node.is_router:

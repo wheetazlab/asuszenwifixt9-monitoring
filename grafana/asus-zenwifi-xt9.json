@@ -1820,6 +1820,38 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Link \u2193 (kbps)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kbps"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Link \u2191 (kbps)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kbps"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "Live \u2193"
             },
             "properties": [
@@ -1998,7 +2030,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|Value #[ADEFGHI]|mac|node|band|hostname|ip|interface)$"
+              "pattern": "^(Time|Value #[A-I]|mac|node|band|hostname|ip|interface)$"
             }
           }
         },
@@ -2040,11 +2072,13 @@
               "band": 4,
               "interface": 5,
               "Value #A": 5,
-              "Value #D": 6,
-              "Value #E": 7,
-              "Value #F": 8,
-              "Value #H": 9,
-              "Value #I": 10
+              "Value #D": 8,
+              "Value #E": 9,
+              "Value #F": 10,
+              "Value #H": 11,
+              "Value #I": 12,
+              "Value #B": 6,
+              "Value #C": 7
             },
             "renameByName": {
               "ip": "IP Address",
@@ -2054,7 +2088,9 @@
               "Value #E": "Live \u2191",
               "Value #F": "Connected For",
               "Value #H": "Avg \u2193",
-              "Value #I": "Avg \u2191"
+              "Value #I": "Avg \u2191",
+              "Value #B": "Link \u2193 (kbps)",
+              "Value #C": "Link \u2191 (kbps)"
             }
           }
         }
