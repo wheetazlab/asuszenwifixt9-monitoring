@@ -1660,7 +1660,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(15, rate(asus_router_wifi_client_rx_bytes_total[5m]) * 8)",
+          "expr": "topk(15, rate(asus_router_wifi_client_tx_bytes_total[5m]) * 8)",
           "instant": true,
           "legendFormat": "{{hostname}} ({{mac}})",
           "refId": "A"
@@ -1725,7 +1725,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "topk(15, rate(asus_router_wifi_client_tx_bytes_total[5m]) * 8)",
+          "expr": "topk(15, rate(asus_router_wifi_client_rx_bytes_total[5m]) * 8)",
           "instant": true,
           "legendFormat": "{{hostname}} ({{mac}})",
           "refId": "A"
